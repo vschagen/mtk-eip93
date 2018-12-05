@@ -7,7 +7,7 @@ It enables hardware crypto for DES-ECB/CBC, 3DES-ECB/CBC and
 AES-ECB/CBC with 128/192/256 keysize. AES-CTR (128/192/256) is not tested.
 
 
-This should be added to your device DTS or better yet to the mt76x8.dtsi:
+This should be added to your device DTS or better yet to the mt7621.dtsi:
 
 	crypto: crypto@1E004000 {
 		status = "okay";
