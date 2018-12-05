@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018 Richard van Schagen. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,79 +27,6 @@
 #include <linux/types.h>
 
 #include "core-eip93.h"
-
-/* ============ BIT_n ============ */
-
-// using postfix "U" to be compatible with uint32
-// ("UL" is not needed and gives lint warning)
-#define BIT_0   0x00000001U
-#define BIT_1   0x00000002U
-#define BIT_2   0x00000004U
-#define BIT_3   0x00000008U
-#define BIT_4   0x00000010U
-#define BIT_5   0x00000020U
-#define BIT_6   0x00000040U
-#define BIT_7   0x00000080U
-#define BIT_8   0x00000100U
-#define BIT_9   0x00000200U
-#define BIT_10  0x00000400U
-#define BIT_11  0x00000800U
-#define BIT_12  0x00001000U
-#define BIT_13  0x00002000U
-#define BIT_14  0x00004000U
-#define BIT_15  0x00008000U
-#define BIT_16  0x00010000U
-#define BIT_17  0x00020000U
-#define BIT_18  0x00040000U
-#define BIT_19  0x00080000U
-#define BIT_20  0x00100000U
-#define BIT_21  0x00200000U
-#define BIT_22  0x00400000U
-#define BIT_23  0x00800000U
-#define BIT_24  0x01000000U
-#define BIT_25  0x02000000U
-#define BIT_26  0x04000000U
-#define BIT_27  0x08000000U
-#define BIT_28  0x10000000U
-#define BIT_29  0x20000000U
-#define BIT_30  0x40000000U
-#define BIT_31  0x80000000U
-
-
-/* ============ MASK_n_BITS ============ */
-
-#define MASK_1_BIT      (BIT_1 - 1)
-#define MASK_2_BITS     (BIT_2 - 1)
-#define MASK_3_BITS     (BIT_3 - 1)
-#define MASK_4_BITS     (BIT_4 - 1)
-#define MASK_5_BITS     (BIT_5 - 1)
-#define MASK_6_BITS     (BIT_6 - 1)
-#define MASK_7_BITS     (BIT_7 - 1)
-#define MASK_8_BITS     (BIT_8 - 1)
-#define MASK_9_BITS     (BIT_9 - 1)
-#define MASK_10_BITS    (BIT_10 - 1)
-#define MASK_11_BITS    (BIT_11 - 1)
-#define MASK_12_BITS    (BIT_12 - 1)
-#define MASK_13_BITS    (BIT_13 - 1)
-#define MASK_14_BITS    (BIT_14 - 1)
-#define MASK_15_BITS    (BIT_15 - 1)
-#define MASK_16_BITS    (BIT_16 - 1)
-#define MASK_17_BITS    (BIT_17 - 1)
-#define MASK_18_BITS    (BIT_18 - 1)
-#define MASK_19_BITS    (BIT_19 - 1)
-#define MASK_20_BITS    (BIT_20 - 1)
-#define MASK_21_BITS    (BIT_21 - 1)
-#define MASK_22_BITS    (BIT_22 - 1)
-#define MASK_23_BITS    (BIT_23 - 1)
-#define MASK_24_BITS    (BIT_24 - 1)
-#define MASK_25_BITS    (BIT_25 - 1)
-#define MASK_26_BITS    (BIT_26 - 1)
-#define MASK_27_BITS    (BIT_27 - 1)
-#define MASK_28_BITS    (BIT_28 - 1)
-#define MASK_29_BITS    (BIT_29 - 1)
-#define MASK_30_BITS    (BIT_30 - 1)
-#define MASK_31_BITS    (BIT_31 - 1)
-
 
 /* key size in bytes */
 #define MTK_SHA_HMAC_KEY_SIZE		64
@@ -169,21 +96,21 @@
 #define CRYPTO_ENCRYPTION		1
 #define CRYPTO_DECRYPTION		2
 
-#define MTK_RING_SIZE			512
+#define MTK_RING_SIZE			256
 #define NUM_AES_BYPASS			250
-#define MTK_QUEUE_LENGTH		64
+#define MTK_QUEUE_LENGTH		16
 /*
  * Interrupts of EIP93
  */
 typedef enum
 {
-    EIP93_INT_PE_CDRTHRESH_REQ =   BIT_0,
-    EIP93_INT_PE_RDRTHRESH_REQ =   BIT_1,
-    EIP93_INT_PE_OPERATION_DONE =  BIT_9,
-    EIP93_INT_PE_INBUFTHRESH_REQ = BIT_10,
-    EIP93_INT_PE_OUTBURTHRSH_REQ = BIT_11,
-    EIP93_INT_PE_ERR_REG =         BIT_13,
-    EIP93_INT_PE_RD_DONE_IRQ =     BIT_16
+    EIP93_INT_PE_CDRTHRESH_REQ =   BIT(0),
+    EIP93_INT_PE_RDRTHRESH_REQ =   BIT(1),
+    EIP93_INT_PE_OPERATION_DONE =  BIT(9),
+    EIP93_INT_PE_INBUFTHRESH_REQ = BIT(10),
+    EIP93_INT_PE_OUTBURTHRSH_REQ = BIT(11),
+    EIP93_INT_PE_ERR_REG =         BIT(13),
+    EIP93_INT_PE_RD_DONE_IRQ =     BIT(16)
 
 } EIP93_InterruptSource_t;
 

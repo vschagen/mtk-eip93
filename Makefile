@@ -13,22 +13,22 @@ PKG_RELEASE:=0.2
 
 include $(INCLUDE_DIR)/package.mk
 
-define Package/crypto-hw-mtk-eip93/Default
+define Package/crypto-hw-eip93/Default
   SECTION:=kernel
   CATEGORY:=Kernel modules
   SUBMENU:=Cryptographic API modules
 endef
 
-define KernelPackage/crypto-hw-mtk-eip93
-  $(call Package/crypto-hw-mtk-eip93/Default)
+define KernelPackage/crypto-hw-eip93
+  $(call Package/crypto-hw-eip93/Default)
   SECTION:=kernel
   DEPENDS:=@TARGET_ramips_mt7621
   TITLE:=Mediatek EIP93 crypto engine.
-  FILES:=$(PKG_BUILD_DIR)/crypto-hw-mtk-eip93.ko
+  FILES:=$(PKG_BUILD_DIR)/crypto-hw-eip93.ko
 #  AUTOLOAD:=$(call AutoProbe,crypto-hw-mtk-eip93)
 endef
 
-define KernelPackage/crypto-hw-mtk-eip93/description
+define KernelPackage/crypto-hw-eip93/description
 Asynchronous Kernel module to enable EIP-93 Crypto Engine
 in the Mediatek MT7621 SoC.
 endef
@@ -42,4 +42,4 @@ define Build/Compile
         modules
 endef
 
-$(eval $(call KernelPackage,crypto-hw-mtk-eip93))
+$(eval $(call KernelPackage,crypto-hw-eip93))

@@ -193,12 +193,12 @@ static int mtk_import_common(struct ahash_request *req, u64 in_count,
 		rctx->first_blk = 1;
 	} else {
 		rctx->first_blk = 0;
-		/*
-		 * For HMAC, there is a hardware padding done when first block
-		 * is set. Therefore the byte_count must be incremened by 64
-		 * after the first block operation.
-		 */
-/*
+		//
+		// For HMAC, there is a hardware padding done when first block
+		// is set. Therefore the byte_count must be incremened by 64
+		// after the first block operation.
+		//
+
 		if (hmac)
 			count += SHA_PADDING;
 	}
@@ -266,10 +266,10 @@ static int mtk_ahash_update(struct ahash_request *req)
 	rctx->src_orig = req->src;
 	rctx->nbytes_orig = req->nbytes;
 
-	/*
-	 * if we have data from previous update copy them on buffer. The old
-	 * data will be combined with current request bytes.
-	 //
+	//
+	// if we have data from previous update copy them on buffer. The old
+	// data will be combined with current request bytes.
+	//
 	if (rctx->buflen)
 		memcpy(rctx->tmpbuf, rctx->buf, rctx->buflen);
 
@@ -478,7 +478,7 @@ static const struct mtk_ahash_def ahash_def[] = {
 	{
 		.flags		= MTK_HASH_SHA1,
 		.name		= "sha1",
-		.drv_name	= "sha1-mtk",
+		.drv_name	= "eip93-sha1",
 		.digestsize	= SHA1_DIGEST_SIZE,
 		.blocksize	= SHA1_BLOCK_SIZE,
 		.statesize	= sizeof(struct sha1_state),
@@ -487,7 +487,7 @@ static const struct mtk_ahash_def ahash_def[] = {
 	{
 		.flags		= MTK_HASH_SHA256,
 		.name		= "sha256",
-		.drv_name	= "sha256-mtk",
+		.drv_name	= "eip93-sha256",
 		.digestsize	= SHA256_DIGEST_SIZE,
 		.blocksize	= SHA256_BLOCK_SIZE,
 		.statesize	= sizeof(struct sha256_state),
@@ -496,7 +496,7 @@ static const struct mtk_ahash_def ahash_def[] = {
 	{
 		.flags		= MTK_HASH_SHA1_HMAC,
 		.name		= "hmac(sha1)",
-		.drv_name	= "hmac-sha1-mtk",
+		.drv_name	= "eip93-hmac-sha1",
 		.digestsize	= SHA1_DIGEST_SIZE,
 		.blocksize	= SHA1_BLOCK_SIZE,
 		.statesize	= sizeof(struct sha1_state),
@@ -505,7 +505,7 @@ static const struct mtk_ahash_def ahash_def[] = {
 	{
 		.flags		= MTK_HASH_SHA256_HMAC,
 		.name		= "hmac(sha256)",
-		.drv_name	= "hmac-sha256-mtk",
+		.drv_name	= "eip93-hmac-sha256",
 		.digestsize	= SHA256_DIGEST_SIZE,
 		.blocksize	= SHA256_BLOCK_SIZE,
 		.statesize	= sizeof(struct sha256_state),

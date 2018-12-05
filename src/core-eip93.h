@@ -44,8 +44,8 @@ struct mtk_device {
 	dma_addr_t			phy_record;
 
 	struct crypto_queue		queue;
-	struct tasklet_struct		done_tasklet;
-	struct tasklet_struct		queue_tasklet;
+//	struct tasklet_struct		done_tasklet;
+//	struct tasklet_struct		queue_tasklet;
 	unsigned int			rec_front_idx;
 	unsigned int			rec_rear_idx;
 	struct mtk_dma_rec		*rec;
@@ -55,7 +55,6 @@ struct mtk_device {
 
 	int				result;
 	int				count;
-	int				getcount;
 
 	unsigned int			seed[8];
 

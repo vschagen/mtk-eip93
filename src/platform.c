@@ -18,6 +18,7 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
@@ -33,7 +34,8 @@
 
 static const struct mtk_algo_ops *mtk_ops[] = {
 	&ablkcipher_ops,
-//	&ahash_ops,
+	&ahash_ops,
+//	&prng_ops,
 };
 
 static void mtk_unregister_algs(struct mtk_device *mtk)
@@ -72,28 +74,37 @@ static inline int mtk_get_finished_req(struct mtk_device *mtk)
 	int ctr;
 	unsigned int saddr = 0;
 	unsigned int daddr = 0;
-	unsigned int ret;
-	uint32_t interrupts = 0;
+	unsigned int ret, done1, done2;
 	int GetCount, count = 0;
 
-	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & (BIT_10 - 1);
 	ret = -1;
+	spin_lock_irqsave(&mtk->lock, flags);
+	ctr = mtk->rec_front_idx;
+	rd = &mtk->rd[ctr];
+	rec = &mtk->rec[ctr];
+	spin_unlock_irqrestore(&mtk->lock, flags);
+	done1 = rd->peCrtlStat.bits.peReady;
+	done2 = rd->peLength.bits.peReady;
 
-	while (GetCount) {
+	if ((done1 == 1) && (done2 == 1)) {
+		rd->peCrtlStat.bits.peReady = 0;
+		rd->peLength.bits.peReady = 0;
+	} else {
+		return ret;
+	}
+
+	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
+
+	while (GetCount) {	
 		count = count + 1;
 		GetCount = GetCount - 1;
-//		spin_lock_irqsave(&mtk->lock, flags);
-		ctr = mtk->rec_front_idx;
-		rd = &mtk->rd[ctr];
-		rec = &mtk->rec[ctr];
 		mtk->rec_front_idx = (mtk->rec_front_idx + 1) % MTK_RING_SIZE;
-//		spin_unlock_irqrestore(&mtk->lock, flags);
 
 		if (rd->peCrtlStat.bits.errStatus > 0) {
 			dev_err(mtk->dev, "Err: %02x \n",
 				rd->peCrtlStat.bits.errStatus);
 		}
-/*
+
 		if (rec->saddr != saddr) {
 			saddr = rec->saddr;
 			dma_unmap_page(mtk->dev, saddr, rec->ssize,
@@ -104,75 +115,33 @@ static inline int mtk_get_finished_req(struct mtk_device *mtk)
 				dma_unmap_page(mtk->dev, daddr, rec->dsize,
 					DMA_FROM_DEVICE);
 		}
-*/
-		if (rec->flags & BIT_0) {
+
+		if (rec->flags & BIT(0)) {
 			ret = ctr;
 			break;
 		}
+
 	}
+
 	if (count > 0) {
+		spin_lock_irqsave(&mtk->lock, flags);
 		writel(count, mtk->base + EIP93_REG_PE_RD_COUNT);
-		mtk->getcount = mtk->getcount - count;
+		spin_unlock_irqrestore(&mtk->lock, flags);
 	}
 	return ret;
 }
 
-static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
+static irqreturn_t mtk_irq_thread(int irq, void *dev_id)
 {
 	struct mtk_device *mtk = (struct mtk_device *)dev_id;
-	u32 irq_status;
-	u32 GetCount;
-
-	//irq_status = readl(mtk->base + EIP93_REG_INT_MASK_STAT);
-
-	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
-	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
-
-	tasklet_schedule(&mtk->done_tasklet);
-
-	return IRQ_HANDLED;
-}
-/*
-	if (irq_status & BIT_0) {
-		writel(BIT_0, mtk->base + EIP93_REG_INT_CLR);
-		writel(BIT_0, mtk->base + EIP93_REG_MASK_DISABLE);
-		if (mtk->count > 0) {
-			tasklet_hi_schedule(&mtk->done_tasklet);
-		}
-		return IRQ_HANDLED;
-	}
-
-	if (irq_status & BIT_1) {
-		writel(BIT_1, mtk->base + EIP93_REG_INT_CLR);
-		writel(BIT_1, mtk->base + EIP93_REG_MASK_DISABLE);
-		if (mtk->count > 0) {
-			tasklet_hi_schedule(&mtk->done_tasklet);
-		}
-		return IRQ_HANDLED;
-	}
-
-
-// TODO: error handler; for now just clear ALL //
-	printk("IRQ: %08x\n", irq_status);
-	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
-
-	return IRQ_HANDLED;
-}
-*/
-
-static void mtk_tasklet_req_done(unsigned long data)
-{
-	struct mtk_device *mtk = (struct mtk_device *)data;
-	int GetCount, trycount;
-	u32 pe_status;
-	int ctr;
+	int ctr, more;
 	struct mtk_dma_rec *rec;
 	unsigned long flags;	
 
 	if (mtk->count == 0) {
-		writel(BIT_1, mtk->base + EIP93_REG_INT_CLR);
-		writel(BIT_1, mtk->base + EIP93_REG_MASK_ENABLE);
-		return;
+		writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
+		writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
+		return IRQ_HANDLED;
 	}
 
 get_more:
@@ -183,19 +152,55 @@ get_more:
 		cpu_relax();
 		goto get_more;
 	}
- 	rec = &mtk->rec[ctr];
-	if (rec->flags & BIT_1) {
-		mtk_cipher_req_done(mtk, ctr);
-		cpu_relax();
-	}
 
-	if (mtk->count > 1) {
+ 	rec = &mtk->rec[ctr];
+	if (rec->flags & BIT(1)) {
+		mtk_cipher_req_done(mtk, ctr);
+	}
+	more = 0;
+	spin_lock_irqsave(&mtk->lock, flags);
+	more = mtk->count;
+	spin_unlock_irqrestore(&mtk->lock, flags);
+
+/*
+	if (more > 1) {
 		goto get_more;
 	}
+*/
 	// Clear and Enable
-	writel(BIT_1, mtk->base + EIP93_REG_INT_CLR);
-	writel(BIT_1, mtk->base + EIP93_REG_MASK_ENABLE);
-	return;
+	writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
+	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
+{
+	struct mtk_device *mtk = (struct mtk_device *)dev_id;
+	u32 irq_status;
+
+	irq_status = readl(mtk->base + EIP93_REG_INT_MASK_STAT);
+
+	if (irq_status & BIT(0)) {
+		writel(BIT(0), mtk->base + EIP93_REG_INT_CLR);
+		writel(BIT(0), mtk->base + EIP93_REG_MASK_DISABLE);
+		if (mtk->count > 0) {
+			return IRQ_WAKE_THREAD;
+		}
+		return IRQ_HANDLED;
+	}
+
+	if (irq_status & BIT(1)) {
+		writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
+		writel(BIT(1), mtk->base + EIP93_REG_MASK_DISABLE);
+		return IRQ_WAKE_THREAD;
+	}
+
+
+// TODO: error handler; for now just clear ALL //
+//	printk("IRQ: %08x\n", irq_status);
+//	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
+
+	return IRQ_HANDLED;
 }
 
 /*----------------------------------------------------------------------------
@@ -278,7 +283,7 @@ static bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
 	// normally this will we get the result descriptors in no-time
 	while(LoopLimiter > 0)
 	{
-	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & (BIT_10 - 1);
+	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
         if (GetCount > 0)
             break;
@@ -326,16 +331,15 @@ void mtk_initialize(struct mtk_device *mtk)
 	uint8_t fBO_Data_en = 0;
 	uint8_t fBO_TD_en = 0;
 	uint8_t fEnablePDRUpdate = 1;
-	uint32_t interrupts = 0;
-	int InputThreshold = 64;
-	int OutputThreshold = 64;
+	int InputThreshold = 32;
+	int OutputThreshold = 32;
 	int DescriptorCountDone = 1;
 	int DescriptorPendingCount = 1;
 	int DescriptorDoneTimeout = 0;
 
 	writel((fRstPacketEngine & 1) |
 		((fResetRing & 1) << 1) |
-		((PE_Mode &(BIT_2-1)) << 8) |
+		((PE_Mode & GENMASK(2, 0)) << 8) |
 		((fBO_PD_en & 1) << 16) |
 		((fBO_SA_en & 1) << 17) |
 		((fBO_Data_en  & 1) << 18) |
@@ -350,7 +354,7 @@ void mtk_initialize(struct mtk_device *mtk)
 
 	writel((fRstPacketEngine & 1) |
 		((fResetRing & 1) << 1) |
-		((PE_Mode &(BIT_2-1)) << 8) |
+		((PE_Mode & GENMASK(2, 0)) << 8) |
 		((fBO_PD_en & 1) << 16) |
 		((fBO_SA_en & 1) << 17) |
 		((fBO_Data_en  & 1) << 18) |
@@ -359,10 +363,10 @@ void mtk_initialize(struct mtk_device *mtk)
 		mtk->base + EIP93_REG_PE_CONFIG);
 
 	// Initialize the BYTE_ORDER_CFG register
-	writel((EIP93_BYTE_ORDER_PD & (BIT_4-1)) |
-		((EIP93_BYTE_ORDER_SA & (BIT_4-1)) << 4) |
-		((EIP93_BYTE_ORDER_DATA & (BIT_4-1)) << 8) |
-		((EIP93_BYTE_ORDER_TD & (BIT_2-1)) << 16),
+	writel((EIP93_BYTE_ORDER_PD & GENMASK(4, 0)) |
+		((EIP93_BYTE_ORDER_SA & GENMASK(4, 0)) << 4) |
+		((EIP93_BYTE_ORDER_DATA & GENMASK(4, 0)) << 8) |
+		((EIP93_BYTE_ORDER_TD & GENMASK(2, 0)) << 16),
 		mtk->base + EIP93_REG_PE_ENDIAN_CONFIG);
 	// Initialize the INT_CFG register
 	writel((EIP93_INT_HOST_OUTPUT_TYPE & 1 ) |
@@ -371,14 +375,14 @@ void mtk_initialize(struct mtk_device *mtk)
 	// Clock Control, must for DHM, optional for ARM
 //	writel(0x1, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
 
-	writel((InputThreshold& (BIT_10-1)) |
-		((OutputThreshold & (BIT_10-1)) << 16),
+	writel((InputThreshold & GENMASK(10, 0)) |
+		((OutputThreshold & GENMASK(10, 0)) << 16),
 		mtk->base + EIP93_REG_PE_BUF_THRESH);
 
-         writel((DescriptorCountDone & (BIT_10-1)) |
-		((DescriptorPendingCount & (BIT_10-1)) << 16) |
-		((DescriptorDoneTimeout  & (BIT_6-1)) << 26) |
-		BIT_31,	mtk->base + EIP93_REG_PE_RING_THRESH);
+         writel((DescriptorCountDone & GENMASK(10, 0)) |
+		((DescriptorPendingCount & GENMASK(10, 0)) << 16) |
+		((DescriptorDoneTimeout  & GENMASK(6, 0)) << 26) |
+		BIT(31), mtk->base + EIP93_REG_PE_RING_THRESH);
 
 	// Clear/ack all interrupts before disable all
 	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
@@ -387,7 +391,7 @@ void mtk_initialize(struct mtk_device *mtk)
 	// Initilaize the PRNG in AUTO Mode
 	mtk_prng_activate(mtk, true);
 	// Activate Interrupts:
-	writel(BIT_1, mtk->base + EIP93_REG_MASK_ENABLE);
+	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
 }
 
 /* Allocate Descriptor rings */
@@ -428,7 +432,7 @@ static int mtk_desc_init(struct mtk_device *mtk)
 
 	RingOffset = 8; // 8 words per descriptor
 	RingSize = MTK_RING_SIZE - 1;
-	writel(((RingOffset & (BIT_8-1)) << 16) | ( RingSize & (BIT_10-1)),
+	writel(((RingOffset & GENMASK(8, 0)) << 16) | ( RingSize & GENMASK(10, 0)),
 		mtk->base + EIP93_REG_PE_RING_CONFIG);
 
 	// Create SA and State records
@@ -535,16 +539,12 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 	dev_info(mtk->dev, "Assigning IRQ: %d", mtk->irq);
 
 	ret = devm_request_threaded_irq(mtk->dev, mtk->irq, mtk_irq_handler,
-					NULL, IRQF_ONESHOT,
+					mtk_irq_thread, IRQF_ONESHOT,
 					dev_name(mtk->dev), mtk);
 
 	ret = mtk_desc_init(mtk);
 	ret = mtk_register_algs(mtk);
 	mtk_initialize(mtk);
-
-	tasklet_init(&mtk->done_tasklet, mtk_tasklet_req_done,
-		     (unsigned long)mtk);
-
 
 	return 0;
 }
@@ -553,7 +553,6 @@ static int mtk_crypto_remove(struct platform_device *pdev)
 {
 	struct mtk_device *mtk = platform_get_drvdata(pdev);
 
-	tasklet_kill(&mtk->done_tasklet);
 	mtk_unregister_algs(mtk);
 	mtk_desc_free(mtk);
 

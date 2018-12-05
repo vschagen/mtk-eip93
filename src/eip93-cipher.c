@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
 #include <linux/scatterlist.h>
 #include <linux/types.h>
 #include <crypto/aes.h>
@@ -35,7 +36,7 @@ void mtk_cipher_req_done(struct mtk_device *mtk, int ctr)
 	struct ablkcipher_request *req = NULL;
 	struct eip93DescpHandler_s *rd;
 	struct mtk_dma_rec *rec;
-	unsigned long flags;	
+	unsigned long flags;
 
 	rd = &mtk->rd[ctr];
 	rec = &mtk->rec[ctr];
@@ -43,10 +44,10 @@ void mtk_cipher_req_done(struct mtk_device *mtk, int ctr)
 
 	if (req) {
 		rec->flags = 0;
-//		spin_lock_irqsave(&mtk->lock, flags);
-		mtk->count--;
-//		spin_unlock_irqrestore(&mtk->lock, flags);
+		spin_lock_irqsave(&mtk->lock, flags);
 		req->base.complete(&req->base, 0);
+		mtk->count--;
+		spin_unlock_irqrestore(&mtk->lock, flags);
 	}
 }
 
@@ -90,6 +91,29 @@ fallback:
 	return ret;
 }
 
+static dma_addr_t mtk_dma_map(struct mtk_device *mtk, struct page *pg,
+		int offset, int len)
+{
+	dma_addr_t addr, ret;
+	int size;
+	int i = 0;
+
+	while (1) {
+		size = min(PAGE_SIZE - offset, len);
+		addr = dma_map_page(mtk->dev, pg, offset, size, DMA_BIDIRECTIONAL);
+		if (i == 0)
+			ret = addr;
+
+		if (size == len)
+			break;
+		pg++;
+		len -= size;
+		offset = 0;
+		i++;
+	}
+	return ret;
+}
+
 int mtk_scatter_combine(struct mtk_device *mtk, struct scatterlist *sgsrc,
 		struct scatterlist *sgdst, int nbytes)
 {
@@ -112,13 +136,13 @@ int mtk_scatter_combine(struct mtk_device *mtk, struct scatterlist *sgsrc,
 	soff = sgsrc->offset;
 	remainin = min(sgsrc->length, n);
 	ssize = remainin;
-	saddr = dma_map_page(mtk->dev, spage, soff, remainin, DMA_TO_DEVICE);
+	saddr = mtk_dma_map(mtk, spage, soff, remainin);
 
 	dpage = sg_page(sgdst);
 	doff = sgdst->offset;
 	remainout = min(sgdst->length, n);
 	dsize = remainout;
-	daddr = dma_map_page(mtk->dev, dpage, doff, remainout, DMA_FROM_DEVICE);
+	daddr = mtk_dma_map(mtk, dpage, doff, remainout);
 
 	ctr = mtk->rec_rear_idx;
 
@@ -130,8 +154,7 @@ int mtk_scatter_combine(struct mtk_device *mtk, struct scatterlist *sgsrc,
 			remainin = min(sgsrc->length, n);
 			if (remainin == 0)
 				continue;
-			saddr = dma_map_page(mtk->dev, spage, soff, remainin,
-				DMA_BIDIRECTIONAL);
+			saddr = mtk_dma_map(mtk, spage, soff, remainin);
 			ssize = remainin;
 			offsetin = 0;
 			nextin = false;
@@ -144,8 +167,7 @@ int mtk_scatter_combine(struct mtk_device *mtk, struct scatterlist *sgsrc,
 			remainout = min(sgdst->length, n);
 			if (remainout == 0)
 				continue;
-			daddr = dma_map_page(mtk->dev, dpage, doff, remainout,
-				DMA_BIDIRECTIONAL);
+			daddr = mtk_dma_map(mtk, dpage, doff, remainout);
 			dsize = remainout;
 			offsetout = 0;
 			nextout = false;
@@ -190,15 +212,14 @@ int mtk_cipher_xmit(struct mtk_device *mtk, struct ablkcipher_request *req)
 	struct eip93DescpHandler_s *cd;
 	struct mtk_dma_rec *rec;
 	u32 aesKeyLen;
-	u32 ctr = 0, count, i, errVal, spi = 0;
+	u32 ctr = 0, count, i;
 	saRecord_t *saRecord;
 	saState_t *saState;
 	dma_addr_t saPhyAddr, statePhyAddr;
-	int LoopLimiter = 10000;
-	unsigned int total;
-	uint32_t interrupts = 0;
 	unsigned long flags = 0;
-	unsigned long GetCount;
+	int DescriptorCountDone = 1;
+	int DescriptorPendingCount = 1;
+	int DescriptorDoneTimeout = 3;
 
 	if (!mtk)
 		return -ENODEV;
@@ -294,7 +315,7 @@ int mtk_cipher_xmit(struct mtk_device *mtk, struct ablkcipher_request *req)
 		memset(cd, 0x00, 32); // clear CDR??
 		rec = &mtk->rec[ctr];
 		rec->req = (void *)req;
-		rec->flags = BIT_1; // (TODO indicate simple "crypto"
+		rec->flags = BIT(1); // (TODO indicate simple "crypto"
 		rec->saAddr = (unsigned int)saRecord;
 		rec->stateAddr = (unsigned int)saState;
 		cd->peCrtlStat.bits.hostReady = 1;
@@ -307,30 +328,32 @@ int mtk_cipher_xmit(struct mtk_device *mtk, struct ablkcipher_request *req)
 		cd->saAddr = saPhyAddr;
 		cd->stateAddr = statePhyAddr;
 		cd->arc4Addr = statePhyAddr;
-		cd->peLength.bits.length = (rec->dmaLen) & (BIT_20 - 1);
+		cd->peLength.bits.length = (rec->dmaLen) & GENMASK(20, 0);
 		cd->peLength.bits.hostReady = 1;
 		ctr = (ctr + 1) % MTK_RING_SIZE;
 	}
-	rec->flags |= BIT_0; // Indicate last
+	rec->flags |= BIT(0); // Indicate last
 	mtk->rec_rear_idx = ctr;
-	mtk->getcount = mtk->getcount + count;
 	spin_unlock_irqrestore(&mtk->lock, flags);
 
 	/*
 	 * Make sure all data is updated before starting engine.
 	 */
 	wmb();
+	/* Update CDR count to reduce IRQs */
+
+	DescriptorCountDone = count;
+	writel((DescriptorCountDone & GENMASK(10, 0)) |
+		((DescriptorPendingCount & GENMASK(10, 0)) << 16) |
+		((DescriptorDoneTimeout  & GENMASK(6, 0)) << 26) |
+		BIT(31), mtk->base + EIP93_REG_PE_RING_THRESH);
+
 	/* Writing new descriptor count starts DMA action */
 	writel(count, mtk->base + EIP93_REG_PE_CD_COUNT);
+	/* Enable CDR Interupt */
+	writel(BIT(0), mtk->base + EIP93_REG_MASK_ENABLE);
 
-	writel(BIT_0, mtk->base + EIP93_REG_MASK_ENABLE);
 	return 0;
-fail:
-	mtk->rec_front_idx = (mtk->rec_front_idx + 1) % MTK_RING_SIZE;
-free_saRecord:
-	dma_free_coherent(mtk->dev, sizeof(saRecord_t), saRecord, saPhyAddr);
-free_buffer:
-	return errVal;
 }
 
 int mtk_handle_request(struct mtk_device *mtk, struct ablkcipher_request *req)
@@ -365,7 +388,7 @@ int mtk_handle_queue(struct mtk_device *mtk, struct ablkcipher_request *req)
 
 	spin_lock_irqsave(&mtk->lock, flags);
 
-	if (mtk->count > MTK_QUEUE_LENGTH) {
+	if (mtk->count > 1) { //MTK_QUEUE_LENGTH) {
 		spin_unlock_irqrestore(&mtk->lock, flags);
 		return -EBUSY;
 	}
@@ -476,7 +499,7 @@ static const struct mtk_ablkcipher_def ablkcipher_def[] = {
 	{
 		.flags		= MTK_ALG_AES | MTK_MODE_ECB,
 		.name		= "ecb(aes)",
-		.drv_name	= "ecb-aes-mtk",
+		.drv_name	= "eip93-ecb-aes",
 		.blocksize	= AES_BLOCK_SIZE,
 		.ivsize		= AES_BLOCK_SIZE,
 		.min_keysize	= AES_MIN_KEY_SIZE,
@@ -485,7 +508,7 @@ static const struct mtk_ablkcipher_def ablkcipher_def[] = {
 	{
 		.flags		= MTK_ALG_AES | MTK_MODE_CBC,
 		.name		= "cbc(aes)",
-		.drv_name	= "cbc-aes-mtk",
+		.drv_name	= "eip93-cbc-aes",
 		.blocksize	= AES_BLOCK_SIZE,
 		.ivsize		= AES_BLOCK_SIZE,
 		.min_keysize	= AES_MIN_KEY_SIZE,
@@ -494,7 +517,7 @@ static const struct mtk_ablkcipher_def ablkcipher_def[] = {
 	{
 		.flags		= MTK_ALG_AES | MTK_MODE_CTR,
 		.name		= "ctr(aes)",
-		.drv_name	= "ctr-aes-mtk",
+		.drv_name	= "eip93-ctr-aes",
 		.blocksize	= AES_BLOCK_SIZE,
 		.ivsize		= AES_BLOCK_SIZE,
 		.min_keysize	= AES_MIN_KEY_SIZE,
@@ -503,7 +526,7 @@ static const struct mtk_ablkcipher_def ablkcipher_def[] = {
 	{
 		.flags		= MTK_ALG_DES | MTK_MODE_ECB,
 		.name		= "ecb(des)",
-		.drv_name	= "ecb-des-mtk",
+		.drv_name	= "eip93-ecb-des",
 		.blocksize	= DES_BLOCK_SIZE,
 		.ivsize		= 0,
 		.min_keysize	= DES_KEY_SIZE,
@@ -512,7 +535,7 @@ static const struct mtk_ablkcipher_def ablkcipher_def[] = {
 	{
 		.flags		= MTK_ALG_DES | MTK_MODE_CBC,
 		.name		= "cbc(des)",
-		.drv_name	= "cbc-des-mtk",
+		.drv_name	= "eip93-cbc-des",
 		.blocksize	= DES_BLOCK_SIZE,
 		.ivsize		= DES_BLOCK_SIZE,
 		.min_keysize	= DES_KEY_SIZE,
@@ -521,7 +544,7 @@ static const struct mtk_ablkcipher_def ablkcipher_def[] = {
 	{
 		.flags		= MTK_ALG_3DES | MTK_MODE_ECB,
 		.name		= "ecb(des3_ede)",
-		.drv_name	= "ecb-3des-mtk",
+		.drv_name	= "eip93-ecb-3des",
 		.blocksize	= DES3_EDE_BLOCK_SIZE,
 		.ivsize		= 0,
 		.min_keysize	= DES3_EDE_KEY_SIZE,
@@ -530,7 +553,7 @@ static const struct mtk_ablkcipher_def ablkcipher_def[] = {
 	{
 		.flags		= MTK_ALG_3DES | MTK_MODE_CBC,
 		.name		= "cbc(des3_ede)",
-		.drv_name	= "cbc-3des-mtk",
+		.drv_name	= "eip93-cbc-3des",
 		.blocksize	= DES3_EDE_BLOCK_SIZE,
 		.ivsize		= DES3_EDE_BLOCK_SIZE,
 		.min_keysize	= DES3_EDE_KEY_SIZE,
