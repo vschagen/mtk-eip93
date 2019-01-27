@@ -14,6 +14,8 @@
 #ifndef _CORE_H_
 #define _CORE_H_
 
+#include <linux/timex.h>
+
 /**
  * struct mtk_device - crypto engine device structure
  * @queue: crypto request queue
@@ -55,7 +57,7 @@ struct mtk_device {
 
 	int				result;
 	int				count;
-
+	
 	unsigned int			seed[8];
 
 	int (*async_req_enqueue)(struct mtk_device *mtk,
@@ -79,8 +81,6 @@ struct mtk_dma_rec {
 	unsigned int			daddr;
 	unsigned int			ssize;
 	unsigned int			dsize;
-	unsigned int			saAddr;
-	unsigned int			stateAddr;
 	unsigned int			flags;
 	unsigned int			*req;
 	unsigned int			result;

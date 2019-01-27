@@ -15,8 +15,8 @@
 #include <linux/interrupt.h>
 #include <crypto/internal/hash.h>
 
-#include "common-eip93.h"
-#include "core-eip93.h"
+#include "eip93-common.h"
+#include "eip93-core.h"
 #include "eip93-hash.h"
 
 /* crypto hw padding constant for first operation */

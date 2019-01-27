@@ -1,14 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2018, Richard van Schagen. All rights reserved.
+ * Copyright (C) 2018
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Richard van Schagen <vschagen@cs.com>
  */
 
 #include <crypto/algapi.h>
@@ -18,24 +12,22 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
-#include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 
-#include "common-eip93.h"
-#include "core-eip93.h"
-#include "regs-eip93.h"
+#include "eip93-common.h"
+#include "eip93-core.h"
+#include "eip93-regs.h"
 #include "eip93-prng.h"
 #include "eip93-cipher.h"
-
 #include "eip93-hash.h"
 
 static const struct mtk_algo_ops *mtk_ops[] = {
+	&prng_ops,
 	&ablkcipher_ops,
-	&ahash_ops,
-//	&prng_ops,
+//	&ahash_ops,
 };
 
 static void mtk_unregister_algs(struct mtk_device *mtk)
@@ -70,103 +62,87 @@ static inline int mtk_get_finished_req(struct mtk_device *mtk)
 {
 	struct eip93DescpHandler_s *rd;
 	struct mtk_dma_rec *rec;
-	unsigned long flags;	
 	int ctr;
-	unsigned int saddr = 0;
-	unsigned int daddr = 0;
-	unsigned int ret, done1, done2;
+	unsigned long flags = 0;
+	unsigned int ret;
 	int GetCount, count = 0;
 
-	ret = -1;
-	spin_lock_irqsave(&mtk->lock, flags);
-	ctr = mtk->rec_front_idx;
-	rd = &mtk->rd[ctr];
-	rec = &mtk->rec[ctr];
-	spin_unlock_irqrestore(&mtk->lock, flags);
-	done1 = rd->peCrtlStat.bits.peReady;
-	done2 = rd->peLength.bits.peReady;
+	spin_lock_bh(&mtk->lock);
 
-	if ((done1 == 1) && (done2 == 1)) {
-		rd->peCrtlStat.bits.peReady = 0;
-		rd->peLength.bits.peReady = 0;
-	} else {
-		return ret;
-	}
+	ret = -1;
+	ctr = mtk->rec_front_idx;
 
 	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
-	while (GetCount) {	
+	while (GetCount > 0) {	
 		count = count + 1;
-		GetCount = GetCount - 1;
+		rd = &mtk->rd[mtk->rec_front_idx];
+		rec = &mtk->rec[mtk->rec_front_idx];
 		mtk->rec_front_idx = (mtk->rec_front_idx + 1) % MTK_RING_SIZE;
 
 		if (rd->peCrtlStat.bits.errStatus > 0) {
 			dev_err(mtk->dev, "Err: %02x \n",
 				rd->peCrtlStat.bits.errStatus);
 		}
-
-		if (rec->saddr != saddr) {
-			saddr = rec->saddr;
-			dma_unmap_page(mtk->dev, saddr, rec->ssize,
+		dma_unmap_page(mtk->dev, rec->saddr, rec->ssize,
 				DMA_TO_DEVICE);
-		}
-		if (rec->daddr != daddr) {
-			daddr = rec->daddr;
-				dma_unmap_page(mtk->dev, daddr, rec->dsize,
-					DMA_FROM_DEVICE);
-		}
-
+		dma_unmap_page(mtk->dev, rec->daddr, rec->dsize,
+				DMA_FROM_DEVICE);
+		mtk->count = mtk->count - 1;
 		if (rec->flags & BIT(0)) {
 			ret = ctr;
 			break;
 		}
 
+		GetCount = GetCount - 1;
 	}
 
 	if (count > 0) {
-		spin_lock_irqsave(&mtk->lock, flags);
 		writel(count, mtk->base + EIP93_REG_PE_RD_COUNT);
-		spin_unlock_irqrestore(&mtk->lock, flags);
 	}
+
+	spin_unlock_bh(&mtk->lock);
+
 	return ret;
 }
 
 static irqreturn_t mtk_irq_thread(int irq, void *dev_id)
 {
 	struct mtk_device *mtk = (struct mtk_device *)dev_id;
+	struct ablkcipher_request *req = NULL;
 	int ctr, more;
 	struct mtk_dma_rec *rec;
-	unsigned long flags;	
+	unsigned long flags;
+	int GetCount = 0;
+	int Batch = 0;
 
-	if (mtk->count == 0) {
-		writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
-		writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
-		return IRQ_HANDLED;
-	}
+	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
+
+	if (GetCount == 0)
+		goto clear_en;
 
 get_more:
 	// get one finished request...
 	ctr = mtk_get_finished_req(mtk);
 
 	if (ctr < 0) {
-		cpu_relax();
-		goto get_more;
+		goto clear_en;
 	}
 
  	rec = &mtk->rec[ctr];
 	if (rec->flags & BIT(1)) {
 		mtk_cipher_req_done(mtk, ctr);
 	}
-	more = 0;
-	spin_lock_irqsave(&mtk->lock, flags);
-	more = mtk->count;
-	spin_unlock_irqrestore(&mtk->lock, flags);
 
-/*
-	if (more > 1) {
-		goto get_more;
+	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
+
+	if (GetCount > 0) {
+//		if (Batch < 4) {
+//			Batch++;
+			goto get_more;
+//		}
 	}
-*/
+clear_en:
 	// Clear and Enable
 	writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
 	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
@@ -192,6 +168,9 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 	if (irq_status & BIT(1)) {
 		writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
 		writel(BIT(1), mtk->base + EIP93_REG_MASK_DISABLE);
+		if (mtk->count > 0) {
+			return IRQ_WAKE_THREAD;
+		}
 		return IRQ_WAKE_THREAD;
 	}
 
@@ -200,126 +179,9 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 //	printk("IRQ: %08x\n", irq_status);
 //	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
 
-	return IRQ_HANDLED;
+	return IRQ_NONE;
 }
 
-/*----------------------------------------------------------------------------
- * mtk_prng_activate
- *
- * This function initializes the PE PRNG for the ARM mode.
- *
- * Return Value
- *      true: PRNG is initialized
- *     false: PRNG initialization failed
- */
-static bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
-{
-	int i, ctr;
-	eip93DescpHandler_t *EIP93_CmdDscr;
-	eip93DescpHandler_t *EIP93_ResDscr;
-	unsigned int GetCount = 0;
-	int LoopLimiter = 2500;
-	saRecord_t *saRecord;
-	dma_addr_t saPhyAddr;
-	void *SrcBuffer;
-	void *DstBuffer;
-	dma_addr_t SrcPhyAddr, DstPhyAddr;
-        const uint32_t PRNGKey[]      = {0xe0fc631d, 0xcbb9fb9a,
-                                         0x869285cb, 0xcbb9fb9a,
-                                         0, 0, 0, 0};
-        const uint32_t PRNGSeed[]     = {0x758bac03, 0xf20ab39e,
-                                         0xa569f104, 0x95dfaea6,
-                                         0, 0, 0, 0};
-        const uint32_t PRNGDateTime[] = {0, 0, 0, 0, 0, 0, 0, 0};
-
-	if (!mtk)
-		return -ENODEV;
-
-	SrcBuffer = kzalloc(4080, GFP_KERNEL);
-	DstBuffer = kzalloc(4080, GFP_KERNEL);
-
-	SrcPhyAddr = (u32)dma_map_single(mtk->dev, (void *)SrcBuffer, 4080,
-			DMA_BIDIRECTIONAL);
-
-	DstPhyAddr = (u32)dma_map_single(mtk->dev, (void *)DstBuffer, 4080,
-			DMA_BIDIRECTIONAL);
-
-	// Create SA and State records
-	saRecord = (saRecord_t *) dma_zalloc_coherent(mtk->dev,
-			sizeof(saRecord_t), &saPhyAddr, GFP_KERNEL);
-	if (unlikely(saRecord == NULL))
-	{
-		dev_err(mtk->dev, "!!dma_alloc for saRecord_prepare failed!! \n\n");
-		return -ENOMEM;
-	}
-
-	//printk("SaState: %d, SaRecord: %d\n",sizeof(saState_t), sizeof(saRecord_t));
-	//           56            128
-	// Fill in SA for PRNG Init
-	saRecord->saCmd0.word = 0x00001307;   // SA word 0
-	saRecord->saCmd1.word = 0x02000000;   // SA word 1
-
-	for(i = 0; i < 8; i++) {
-		saRecord->saKey[i]= PRNGKey[i];
-		saRecord->saIDigest[i] = PRNGSeed[i];
-		saRecord->saODigest[i] = PRNGDateTime[i];
-	}
-
-	// Fill in command descriptor
-	ctr = mtk->rec_rear_idx;
-
-	EIP93_CmdDscr = &mtk->cd[ctr];
-	EIP93_CmdDscr->peCrtlStat.bits.prngMode = 1; // PRNG Init function
-	EIP93_CmdDscr->srcAddr = (u32)SrcPhyAddr;
-	EIP93_CmdDscr->dstAddr = (u32)DstPhyAddr;
-	EIP93_CmdDscr->saAddr = (u32)saPhyAddr;
-	EIP93_CmdDscr->peCrtlStat.bits.hostReady= 1;
-	EIP93_CmdDscr->peCrtlStat.bits.peReady= 0;
-	EIP93_CmdDscr->peLength.bits.hostReady= 1;
-	EIP93_CmdDscr->peLength.bits.peReady= 0;
-
-	// now wait for the result descriptor
-	writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
-	// normally this will we get the result descriptors in no-time
-	while(LoopLimiter > 0)
-	{
-	GetCount = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
-
-        if (GetCount > 0)
-            break;
-
-        LoopLimiter--;
-	cpu_relax();
-	}
-
-	if (LoopLimiter <= 0) {
-		printk("EIP93 PRNG could not retrieve a result descriptor\n");
-	goto fail;
-	}
-	ctr = mtk->rec_front_idx;
-
-	EIP93_ResDscr = &mtk->rd[ctr];
-	writel(1, mtk->base + EIP93_REG_PE_RD_COUNT);
-
-	if (EIP93_ResDscr->peCrtlStat.bits.errStatus == 0) {
-		dma_free_coherent(mtk->dev, sizeof(saRecord_t), saRecord, saPhyAddr);
-		dma_unmap_single(mtk->dev, SrcPhyAddr, 4080,
-			DMA_TO_DEVICE);
-		dma_unmap_single(mtk->dev, DstPhyAddr, 4080,
-			DMA_FROM_DEVICE);
-		kfree(SrcBuffer);
-		kfree(DstBuffer);
-		dev_info(mtk->dev, "PRNG Initialized.\n");
-
-		mtk->rec_rear_idx++;
-		mtk->rec_front_idx++;
-
-		return true; // success
-	}
-
-fail:
-	return false;
-}
 
 void mtk_initialize(struct mtk_device *mtk)
 {
@@ -333,9 +195,9 @@ void mtk_initialize(struct mtk_device *mtk)
 	uint8_t fEnablePDRUpdate = 1;
 	int InputThreshold = 32;
 	int OutputThreshold = 32;
-	int DescriptorCountDone = 1;
-	int DescriptorPendingCount = 1;
-	int DescriptorDoneTimeout = 0;
+	int DescriptorCountDone = 0;
+	int DescriptorPendingCount = 0;
+	int DescriptorDoneTimeout = 10;
 
 	writel((fRstPacketEngine & 1) |
 		((fResetRing & 1) << 1) |
@@ -388,8 +250,6 @@ void mtk_initialize(struct mtk_device *mtk)
 	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
 	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
 
-	// Initilaize the PRNG in AUTO Mode
-	mtk_prng_activate(mtk, true);
 	// Activate Interrupts:
 	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
 }
@@ -543,8 +403,9 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 					dev_name(mtk->dev), mtk);
 
 	ret = mtk_desc_init(mtk);
-	ret = mtk_register_algs(mtk);
 	mtk_initialize(mtk);
+
+	ret = mtk_register_algs(mtk);
 
 	return 0;
 }
@@ -577,7 +438,7 @@ static struct platform_driver mtk_crypto_driver = {
 };
 module_platform_driver(mtk_crypto_driver);
 
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Mediatek EIP-93 crypto engine driver");
+MODULE_AUTHOR("Richard van Schagen <vschagen@cs.com>");
 MODULE_ALIAS("platform:" KBUILD_MODNAME);
-MODULE_AUTHOR("Richard van Schagen (vschagen@cs.com)");
+MODULE_DESCRIPTION("Mediatek EIP-93 crypto engine driver");
+MODULE_LICENSE("GPL v2");

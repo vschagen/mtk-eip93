@@ -17,8 +17,8 @@
 #include <crypto/scatterwalk.h>
 #include <crypto/sha.h>
 
-#include "common-eip93.h"
-#include "core-eip93.h"
+#include "eip93-common.h"
+#include "eip93-core.h"
 
 #define MTK_SHA_MAX_BLOCKSIZE		SHA256_BLOCK_SIZE
 #define MTK_SHA_MAX_DIGESTSIZE		SHA256_DIGEST_SIZE

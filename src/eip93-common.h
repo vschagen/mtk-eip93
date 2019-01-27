@@ -26,34 +26,34 @@
 #include <linux/crypto.h>
 #include <linux/types.h>
 
-#include "core-eip93.h"
+#include "eip93-core.h"
 
 /* key size in bytes */
 #define MTK_SHA_HMAC_KEY_SIZE		64
 #define MTK_MAX_CIPHER_KEY_SIZE		AES_KEYSIZE_256
 
 /* IV length in bytes */
-#define MTK_AES_IV_LENGTH		AES_BLOCK_SIZE
+#define MTK_AES_IV_LENGTH			AES_BLOCK_SIZE
 /* max of AES_BLOCK_SIZE, DES3_EDE_BLOCK_SIZE */
-#define MTK_MAX_IV_SIZE			AES_BLOCK_SIZE
+#define MTK_MAX_IV_SIZE				AES_BLOCK_SIZE
 
 /* maximum nonce bytes  */
-#define MTK_MAX_NONCE			16
-#define MTK_MAX_NONCE_WORDS		(MTK_MAX_NONCE / sizeof(u32))
+#define MTK_MAX_NONCE				16
+#define MTK_MAX_NONCE_WORDS			(MTK_MAX_NONCE / sizeof(u32))
 
 /* burst size alignment requirement */
-#define MTK_MAX_ALIGN_SIZE		64
+#define MTK_MAX_ALIGN_SIZE			64
 
 /* cipher algorithms */
-#define MTK_ALG_DES			BIT(0)
+#define MTK_ALG_DES				BIT(0)
 #define MTK_ALG_3DES			BIT(1)
-#define MTK_ALG_AES			BIT(2)
+#define MTK_ALG_AES				BIT(2)
 
 /* hash and hmac algorithms */
 #define MTK_HASH_SHA1			BIT(3)
 #define MTK_HASH_SHA256			BIT(4)
 #define MTK_HASH_SHA1_HMAC		BIT(5)
-#define MTK_HASH_SHA256_HMAC		BIT(6)
+#define MTK_HASH_SHA256_HMAC	BIT(6)
 #define MTK_HASH_AES_CMAC		BIT(7)
 
 /* cipher modes */
@@ -62,11 +62,11 @@
 #define MTK_MODE_CTR			BIT(10)
 //#define MTK_MODE_XTS			BIT(11)
 //#define MTK_MODE_CCM			BIT(12)
-//#define MTK_MODE_MASK			GENMASK(12, 8)
+#define MTK_MODE_MASK			GENMASK(12, 8)
 
 /* cipher encryption/decryption operations */
-#define MTK_ENCRYPT			BIT(13)
-#define MTK_DECRYPT			BIT(14)
+#define MTK_ENCRYPT				BIT(13)
+#define MTK_DECRYPT				BIT(14)
 
 #define IS_DES(flags)			(flags & MTK_ALG_DES)
 #define IS_3DES(flags)			(flags & MTK_ALG_3DES)
@@ -75,7 +75,7 @@
 #define IS_SHA1(flags)			(flags & MTK_HASH_SHA1)
 #define IS_SHA256(flags)		(flags & MTK_HASH_SHA256)
 #define IS_SHA1_HMAC(flags)		(flags & MTK_HASH_SHA1_HMAC)
-#define IS_SHA256_HMAC(flags)		(flags & MTK_HASH_SHA256_HMAC)
+#define IS_SHA256_HMAC(flags)	(flags & MTK_HASH_SHA256_HMAC)
 #define IS_CMAC(flags)			(flags & MTK_HASH_AES_CMAC)
 #define IS_SHA(flags)			(IS_SHA1(flags) || IS_SHA256(flags))
 #define IS_SHA_HMAC(flags)		\
@@ -90,7 +90,6 @@
 #define IS_ENCRYPT(dir)			(dir & MTK_ENCRYPT)
 #define IS_DECRYPT(dir)			(dir & MTK_DECRYPT)
 
-
 #define HASH_DIGEST_OUT			0
 #define HASH_DIGEST_IN			1
 #define CRYPTO_ENCRYPTION		1
@@ -98,7 +97,7 @@
 
 #define MTK_RING_SIZE			256
 #define NUM_AES_BYPASS			250
-#define MTK_QUEUE_LENGTH		16
+#define MTK_QUEUE_LENGTH		128
 /*
  * Interrupts of EIP93
  */
@@ -118,20 +117,20 @@ typedef union
 {
 	struct
 	{
-		unsigned int opCode		: 3;
+		unsigned int opCode			: 3;
 		unsigned int direction		: 1;
 		unsigned int opGroup		: 2;
 		unsigned int padType		: 2;
-		unsigned int cipher		: 4;
-		unsigned int hash		: 4;
+		unsigned int cipher			: 4;
+		unsigned int hash			: 4;
 		unsigned int reserved2		: 1;
-		unsigned int scPad		: 1;
-		unsigned int extPad		: 1;
+		unsigned int scPad			: 1;
+		unsigned int extPad			: 1;
 		unsigned int hdrProc		: 1;
 		unsigned int digestLength	: 4;
 		unsigned int ivSource		: 2;
 		unsigned int hashSource		: 2;
-		unsigned int saveIv		: 1;
+		unsigned int saveIv			: 1;
 		unsigned int saveHash		: 1;
 		unsigned int reserved1		: 2;
 	} bits;
@@ -143,23 +142,23 @@ typedef union
 {
 	struct
 	{
-		unsigned int copyDigest		: 1;
-		unsigned int copyHeader		: 1;
-		unsigned int copyPayload	: 1;
-		unsigned int copyPad		: 1;
-		unsigned int reserved4		: 4;
-		unsigned int cipherMode		: 2;
-		unsigned int reserved3		: 1;
-		unsigned int sslMac		: 1;
-		unsigned int hmac		: 1;
-		unsigned int byteOffset		: 1;
-		unsigned int reserved2		: 2;
+		unsigned int copyDigest			: 1;
+		unsigned int copyHeader			: 1;
+		unsigned int copyPayload		: 1;
+		unsigned int copyPad			: 1;
+		unsigned int reserved4			: 4;
+		unsigned int cipherMode			: 2;
+		unsigned int reserved3			: 1;
+		unsigned int sslMac				: 1;
+		unsigned int hmac				: 1;
+		unsigned int byteOffset			: 1;
+		unsigned int reserved2			: 2;
 		unsigned int hashCryptOffset	: 8;
-		unsigned int aesKeyLen		: 3;
-		unsigned int reserved1		: 1;
-		unsigned int aesDecKey		: 1;
-		unsigned int seqNumCheck	: 1;
-		unsigned int reserved0		: 2;
+		unsigned int aesKeyLen			: 3;
+		unsigned int reserved1			: 1;
+		unsigned int aesDecKey			: 1;
+		unsigned int seqNumCheck		: 1;
+		unsigned int reserved0			: 2;
 	} bits;
 	unsigned int word;
 
@@ -167,8 +166,8 @@ typedef union
 
 typedef struct saRecord_s
 {
-	saCmd0_t	saCmd0;
-	saCmd1_t	saCmd1;
+	saCmd0_t		saCmd0;
+	saCmd1_t		saCmd1;
 	unsigned int	saKey[8];
 	unsigned int	saIDigest[8];
 	unsigned int	saODigest[8];
@@ -207,20 +206,14 @@ typedef union
 {
 	struct
 	{
-		unsigned int length		: 20;
+		unsigned int length			: 20;
 		unsigned int reserved		: 2;
 		unsigned int hostReady		: 1;
 		unsigned int peReady		: 1;
-		unsigned int byPass		: 8;	
+		unsigned int byPass			: 8;
 	} bits;	
 	unsigned int word;		
 } peLength_t;
-
-typedef struct addrHandler_s
-{
-	unsigned int	addr;
-	dma_addr_t	phyAddr;
-} addrHandler_t;
 
 typedef struct eip93DescpHandler_s
 {
@@ -231,37 +224,8 @@ typedef struct eip93DescpHandler_s
 	unsigned int	stateAddr;
 	unsigned int	arc4Addr;
 	unsigned int	userId;
-	peLength_t	peLength;
+	peLength_t		peLength;
 } eip93DescpHandler_t;
-
-typedef struct addrsDigestPreCompute_s
-{
-	unsigned int		*hashKeyTank;
-	addrHandler_t		ipadHandler;
-	addrHandler_t		opadHandler;
-	unsigned int		blkSize;
-	eip93DescpHandler_t	*cmdHandler;
-	addrHandler_t		saHandler;
-	addrHandler_t		stateHandler;
-	addrHandler_t		stateHandler2;
-	unsigned int		digestWord;
-	unsigned int		*pIDigest;
-	unsigned int		*pODigest;
-} addrsDigestPreCompute_t;
-
-typedef struct ipsecEip93Adapter_s
-{
-	unsigned int 		spi; //every ipsec flow has a unique spi
-	struct xfrm_state 	*x; //the SA
-	unsigned int 		isHashPreCompute; //0:pre-compute init, 1:inner digest done, 2:inner digest done, 3:pre-compute done
-	unsigned int 		isEncryptOrDecrypt; //1:encrypt, 2:decrypt
-	struct sk_buff_head	skbQueue;
-	addrsDigestPreCompute_t	*addrsPreCompute; //for hash pre-compute
-	eip93DescpHandler_t	*cmdHandler; //for encrypt/decrypt
-	spinlock_t		lock;
-	unsigned int		addedLen; //refer to ssh_hwaccel_alloc_combined() in safenet_la.c
-} ipsecEip93Adapter_t;
-
 
 struct mtk_alg_template {
 	struct list_head entry;

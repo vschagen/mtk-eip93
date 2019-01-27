@@ -14,16 +14,23 @@
 #ifndef _CIPHER_H_
 #define _CIPHER_H_
 
+#include <linux/timex.h>
+
 struct mtk_cipher_ctx {
 	struct mtk_device	*mtk;
 	u8			key[AES_MAX_KEY_SIZE];
 	u32			keylen;
-	dma_addr_t		phy_key;
+	unsigned int		*saState;
+	dma_addr_t		phy_sa;
+	dma_addr_t		phy_state;
+	bool			refresh;
 	struct crypto_skcipher	*fallback;
 };
 
 struct mtk_cipher_reqctx {
 	unsigned long		flags;
+	struct scatterlist	*sg_src;
+	struct scatterlist	*sg_dst;
 };
 
 static inline struct mtk_alg_template *to_cipher_tmpl(struct crypto_tfm *tfm)
