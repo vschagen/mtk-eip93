@@ -258,7 +258,7 @@ void mtk_prepare_sa(struct mtk_device *mtk, struct mtk_cipher_ctx *ctx,
 	saRecord_t *saRecord;
 	saState_t *saState;
 
-	/* prepare SA */
+	/* Part 1: prepare context */
 
 	saRecord = &mtk->saRecord[ctr];
 	memset(saRecord, 0x00, sizeof(saRecord_t));
@@ -269,54 +269,44 @@ void mtk_prepare_sa(struct mtk_device *mtk, struct mtk_cipher_ctx *ctx,
 	memset(saState, 0x00, sizeof(saState_t));
 	ctx->phy_state = mtk->phy_state + (sizeof(saState_t) * ctr);
 
-	if IS_ENCRYPT(flags) {
-		saRecord->saCmd0.bits.direction = 0x0; //outbound
-	} else {
-		saRecord->saCmd0.bits.direction = 0x1; //inbound
-	}
+	/* Part 2: variable stuff */
 
-	saRecord->saCmd0.bits.ivSource = 0x2;//0x2;Load IV from SaRecord
-	saRecord->saCmd0.bits.saveIv = 0x1;//0x1;Save IV to SaRecord
-	saRecord->saCmd0.bits.opGroup = 0x0; // basic operation
-	saRecord->saCmd0.bits.opCode = 0x0; // protocol
-	if IS_DES(flags) {
-		saRecord->saCmd0.bits.cipher = 0x0;
-	}
-	if IS_3DES(flags) {
-		saRecord->saCmd0.bits.cipher = 0x1;
-	}
-	if IS_AES(flags) {
-		saRecord->saCmd0.bits.cipher = 0x3;
-	}
-	saRecord->saCmd0.bits.hash = 15; // hashAlg 15 = NULL;
-	saRecord->saCmd0.bits.hdrProc = 0x0; // no header processing
-	saRecord->saCmd0.bits.digestLength = 0x0; // digestWord;
-	saRecord->saCmd0.bits.padType = 3; // Zero padding
-	saRecord->saCmd0.bits.extPad = 0;
-	saRecord->saCmd0.bits.scPad = 0; //no padding
+	if IS_ENCRYPT(flags)
+		saRecord->saCmd0.bits.direction = 0
+	else
+		saRecord->saCmd0.bits.direction = 1;
 	if IS_ECB(flags)
 		saRecord->saCmd1.bits.cipherMode = 0;
 	if IS_CBC(flags)
 		saRecord->saCmd1.bits.cipherMode = 1;
 	if IS_CTR(flags)
 		saRecord->saCmd1.bits.cipherMode = 2;
-
-	saRecord->saCmd1.bits.hmac = 0; //enHmac no Hmac;
-
+	if IS_DES(flags)
+		saRecord->saCmd0.bits.cipher = 0;
+	if IS_3DES(flags)
+		saRecord->saCmd0.bits.cipher = 1;
 	if IS_AES(flags) {
-		if (ctx->keylen == AES_KEYSIZE_256)
-			saRecord->saCmd1.bits.aesKeyLen = 4;
-		else if (ctx->keylen == AES_KEYSIZE_192)
-			saRecord->saCmd1.bits.aesKeyLen = 3;
-		else
-			saRecord->saCmd1.bits.aesKeyLen = 2;
+		saRecord->saCmd0.bits.cipher = 3;
+		saRecord->saCmd1.bits.aesKeyLen = ctx->keylen >> 3;
 	}
-	saRecord->saCmd1.bits.seqNumCheck = 0; // no Seq Num Check
 
 	memcpy(saRecord->saKey, ctx->key, ctx->keylen);
 
-	saRecord->saSpi = 0x0; //WORDSWAP(spi); //esp spi
+	/* Part 2: constant stuff */
 
+	saRecord->saCmd0.bits.ivSource = 0x2;   	// 0x2;Load IV from SaRecord
+	saRecord->saCmd0.bits.saveIv = 0x1;     	// 0x1;Save IV to SaRecord
+	saRecord->saCmd0.bits.opGroup = 0x0;    	// basic operation
+	saRecord->saCmd0.bits.opCode = 0x0;     	// protocol
+	saRecord->saCmd0.bits.hash = 15;		// hashAlg 15 = NULL;
+	saRecord->saCmd0.bits.hdrProc = 0x0;		// no header processing
+	saRecord->saCmd0.bits.digestLength = 0x0;	// digestWord;
+	saRecord->saCmd0.bits.padType = 3; 		// Zero padding
+	saRecord->saCmd0.bits.extPad = 0;
+	saRecord->saCmd0.bits.scPad = 0; 		// no padding
+	saRecord->saCmd1.bits.hmac = 0; 		// enHmac no Hmac;
+	saRecord->saCmd1.bits.seqNumCheck = 0;		// no Seq Num Check
+	saRecord->saSpi = 0x0;				// WORDSWAP(spi); //esp spi
 	saRecord->saSeqNumMask[0] = 0xFFFFFFFF;
 	saRecord->saSeqNumMask[1] = 0x0;
 
