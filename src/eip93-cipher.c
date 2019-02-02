@@ -176,12 +176,6 @@ static dma_addr_t mtk_set_saRecord(struct mtk_device *mtk, struct mtk_cipher_ctx
 	} else {
 		saRecord->saCmd0.bits.direction = 0x1; //inbound
 	}
-	saRecord->saCmd0.bits.ivSource = 0x2;//0x2;Load IV from saState
-
-	saRecord->saCmd0.bits.saveIv = 0x1;//0x1;Save IV to saState
-
-	saRecord->saCmd0.bits.opGroup = 0x0; // basic operation
-	saRecord->saCmd0.bits.opCode = 0x0; // protocol
 
 	if IS_DES(flags)
 		saRecord->saCmd0.bits.cipher = 0x0;
@@ -195,8 +189,6 @@ static dma_addr_t mtk_set_saRecord(struct mtk_device *mtk, struct mtk_cipher_ctx
 	if IS_HASH(flags)
 		saRecord->saCmd0.bits.saveHash = 1;
 
-	saRecord->saCmd0.bits.hash = 15; // hash = NULL
-
 	if IS_HASH_MD5(flags)
 		saRecord->saCmd0.bits.hash = 0;
 
@@ -208,13 +200,6 @@ static dma_addr_t mtk_set_saRecord(struct mtk_device *mtk, struct mtk_cipher_ctx
 
 	if IS_HASH_SHA256(flags)
 		saRecord->saCmd0.bits.hash = 3;
-
-	saRecord->saCmd0.bits.hdrProc = 0x0; // no header processing
-
-	saRecord->saCmd0.bits.digestLength = 0x0; // digestWord;
-	saRecord->saCmd0.bits.padType = 3; // Zero padding
-	saRecord->saCmd0.bits.extPad = 0;
-	saRecord->saCmd0.bits.scPad = 0; //no padding
 
 	if IS_ECB(flags)
 		saRecord->saCmd1.bits.cipherMode = 0;
@@ -231,12 +216,20 @@ static dma_addr_t mtk_set_saRecord(struct mtk_device *mtk, struct mtk_cipher_ctx
 	if IS_AES(flags)
 		saRecord->saCmd1.bits.aesKeyLen = ctx->keylen >> 3;
 
-	saRecord->saCmd1.bits.seqNumCheck = 0; // no Seq Num Check
-
 	memcpy(saRecord->saKey, ctx->key, ctx->keylen);
 
-	saRecord->saSpi = 0x0; //WORDSWAP(spi); //esp spi
-
+	saRecord->saCmd0.bits.ivSource = 0x2;		// 0x2;Load IV from saState
+	saRecord->saCmd0.bits.saveIv = 0x1;		// 0x1;Save IV to saState
+	saRecord->saCmd0.bits.opGroup = 0x0; 		// basic operation
+	saRecord->saCmd0.bits.opCode = 0x0; 		// protocol
+	saRecord->saCmd0.bits.hash = 15; 		// hash = NULL
+	saRecord->saCmd0.bits.hdrProc = 0x0;		// no header processing
+	saRecord->saCmd0.bits.digestLength = 0x0;	// digestWord;
+	saRecord->saCmd0.bits.padType = 3;		// Zero padding
+	saRecord->saCmd0.bits.extPad = 0;
+	saRecord->saCmd0.bits.scPad = 0;		// no padding
+	saRecord->saCmd1.bits.seqNumCheck = 0;		// no Seq Num Check
+	saRecord->saSpi = 0x0;				// WORDSWAP(spi); //esp spi
 	saRecord->saSeqNumMask[0] = 0xFFFFFFFF;
 	saRecord->saSeqNumMask[1] = 0x0;
 
