@@ -3,12 +3,12 @@
 Initial attemps for the EIP-93 Crypto Engine Driver. This Crypto Engine is 
 available in the Mediatek MT7621 SoC.
 
-It enables hardware crypto for DES-ECB/CBC, 3DES-ECB/CBC and 
-AES-ECB/CBC with 128/192/256 keysize.
+It enables hardware crypto for:
+* DES-ECB/CBC
+* 3DES-ECB/CBC
+* AES-ECB/CBC/CTR with 128/192/256 keysize.
 
-DES/3DES (todo: check for weak keys.)
-
-AES-CTR (128/192/256)
+DES/3DES (todo: check for weak keys)
 
 This should be added to your device DTS or better yet to the mt7621.dtsi:
 
@@ -26,7 +26,9 @@ Work in progress at the moment: Still need work / cleanup
 
 Rebased code on EIP-197 Safexcel code.
 
-BUG: crypto-blocks > PAGE_SIZE fail !!
+BUG:crypto-blocks > PAGE_SIZE fail !!
+	work around (while continue developing hash portion):
+	Kernel page_size 16Kb
 
 TODO:
 
