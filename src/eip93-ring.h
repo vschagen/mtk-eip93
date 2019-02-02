@@ -5,11 +5,10 @@
  * Richard van Schagen <vschagen@cs.com>
  */
 
-int mtk_ring_first_rdr_index(struct mtk_device *mtk);
-
-int mtk_ring_first_cdr_index(struct mtk_device *mtk);
 
 int mtk_ring_curr_wptr_index(struct mtk_device *mtk);
+
+int mtk_ring_curr_rptr_index(struct mtk_device *mtk);
 
 int mtk_ring_cdr_index(struct mtk_device *mtk,
 				struct eip93_descriptor_s *cdesc);

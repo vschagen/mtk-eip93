@@ -84,10 +84,7 @@ bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
 	cdesc->peCrtlStat.bits.peReady= 0;
 	cdesc->peLength.bits.hostReady= 1;
 	cdesc->peLength.bits.peReady= 0;
-  
-	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
-	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
-  
+    
     // now wait for the result descriptor
     writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
 
@@ -108,7 +105,7 @@ bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
         goto fail;
     }
 
-    writel(1, mtk->base + EIP93_REG_PE_RD_COUNT);    
+    writel(1, mtk->base + EIP93_REG_PE_RD_COUNT);
 	cdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].cdr);
 	rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr);
 
@@ -267,7 +264,7 @@ static int mtk_prng_register(struct mtk_device *mtk)
 	alg = &tmpl->alg.rng;
 
 	alg->generate			= mtk_prng_generate;
-	alg->seed			= mtk_prng_seed;
+	alg->seed				= mtk_prng_seed;
 	alg->seedsize			= 0;
 
 	snprintf(alg->base.cra_name, CRYPTO_MAX_ALG_NAME, "%s", "stdrng");

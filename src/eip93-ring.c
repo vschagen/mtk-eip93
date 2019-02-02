@@ -9,13 +9,6 @@
 #include "eip93-core.h"
 
 
-inline int mtk_ring_first_rdr_index(struct mtk_device *mtk)
-{
-	struct mtk_desc_ring *rdr  = &mtk->ring[0].rdr;
-
-	return (rdr->read - rdr->base) / rdr->offset;
-}
-
 inline int mtk_ring_first_cdr_index(struct mtk_device *mtk)
 {
 	struct mtk_desc_ring *cdr  = &mtk->ring[0].cdr;
@@ -28,6 +21,13 @@ inline int mtk_ring_curr_wptr_index(struct mtk_device *mtk)
 	struct mtk_desc_ring *cdr  = &mtk->ring[0].cdr;
 
 	return (cdr->write - cdr->base) / cdr->offset;
+}
+
+inline int mtk_ring_curr_rptr_index(struct mtk_device *mtk)
+{
+	struct mtk_desc_ring *rdr  = &mtk->ring[0].rdr;
+
+	return (rdr->read - rdr->base) / rdr->offset;
 }
 
 inline int mtk_ring_cdr_index(struct mtk_device *mtk,

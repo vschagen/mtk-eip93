@@ -77,6 +77,9 @@
 #define IS_ENCRYPT(dir)			(dir & MTK_ENCRYPT)
 #define IS_DECRYPT(dir)			(dir & MTK_DECRYPT)
 
+#define IS_HASH(flags)			(flags & (MTK_HASH_MD5 || MTK_HASH_SHA1 || \
+									MTK_HASH_SHA224 || MTK_HASH_SHA256))
+
 #define HASH_DIGEST_OUT			0
 #define HASH_DIGEST_IN			1
 #define CRYPTO_ENCRYPTION		1
@@ -218,6 +221,7 @@ struct mtk_alg_template {
 	struct list_head entry;
 	u32 crypto_alg_type;
 	unsigned long alg_flags;
+	int alg_blksize;
 	const u32 *std_iv;
 	union {
 		struct crypto_alg crypto;

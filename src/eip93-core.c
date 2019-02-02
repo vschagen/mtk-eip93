@@ -61,8 +61,8 @@ static int mtk_register_algs(struct mtk_device *mtk)
 static void mtk_push_request(struct mtk_device *mtk)
 {
 	int DescriptorCountDone = 0;
-	int DescriptorPendingCount = 1;
-	int DescriptorDoneTimeout = 10;
+	int DescriptorPendingCount = 0;
+	int DescriptorDoneTimeout = 1;
 
 	DescriptorPendingCount = min_t(int, mtk->ring[0].requests, 10);
 
@@ -136,7 +136,7 @@ finalize:
 
 	/* Writing new descriptor count starts DMA action */
 	writel(cdesc, mtk->base + EIP93_REG_PE_CD_COUNT);
-	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
+//	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
 }
 
 static void mtk_dequeue_work(struct work_struct *work)
@@ -149,7 +149,7 @@ static void mtk_dequeue_work(struct work_struct *work)
 
 inline struct crypto_async_request * mtk_rdr_req_get(struct mtk_device *mtk)
 {
-	int i = mtk_ring_first_rdr_index(mtk);
+	int i = mtk_ring_curr_rptr_index(mtk);
 	struct mtk_dma_rec *rec = &mtk->ring[0].cdr_dma[i];
 
 	return (struct crypto_async_request *)rec->req;
@@ -158,8 +158,9 @@ inline struct crypto_async_request * mtk_rdr_req_get(struct mtk_device *mtk)
 static inline void mtk_handle_result_descriptor(struct mtk_device *mtk)
 { 
 	struct crypto_async_request *req = NULL;
+	struct mtk_dma_rec *rec;
 	struct mtk_context *ctx;
-	int ret, i, ndesc;
+	int ret, i, ndesc, rptr;
 	int nreq = 0, tot_descs = 0;
 	bool should_complete;
 
@@ -169,7 +170,15 @@ static inline void mtk_handle_result_descriptor(struct mtk_device *mtk)
 		goto requests_left;
 
 	for (i = 0; i < nreq; i++) {
-		req = mtk_rdr_req_get(mtk);
+
+		rptr = mtk_ring_curr_rptr_index(mtk);
+		rec = &mtk->ring[0].cdr_dma[rptr];
+
+		if (rec->flags & BIT(1)) {
+			req = mtk_rdr_req_get(mtk);
+		} else { 
+			break;
+		}
 
 		if (!req)
 				goto acknowledge;
@@ -216,8 +225,8 @@ static irqreturn_t mtk_irq_thread(int irq, void *dev_id)
 	queue_work(mtk->ring[0].workqueue, &mtk->ring[0].work_data.work);
 
 	// Clear and Enable
-	writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
-	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
+	//writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
+	//writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
 
 	return IRQ_HANDLED;
 }
@@ -240,14 +249,16 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 	if (irq_status & BIT(1)) {
 		writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
 		if (mtk->ring[0].requests > 0) {
-			writel(BIT(1), mtk->base + EIP93_REG_MASK_DISABLE);
+			//writel(BIT(1), mtk->base + EIP93_REG_MASK_DISABLE);
 			return IRQ_WAKE_THREAD;
+		} else {
+			return IRQ_HANDLED;
 		}
 	}
 
 
 // TODO: error handler; for now just clear ALL //
-//	printk("IRQ: %08x\n", irq_status);
+	printk("IRQ: %08x\n", irq_status);
 	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
 	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
 
@@ -264,8 +275,8 @@ void mtk_initialize(struct mtk_device *mtk)
 	uint8_t fBO_Data_en = 0;
 	uint8_t fBO_TD_en = 0;
 	uint8_t fEnablePDRUpdate = 1;
-	int InputThreshold = 128;
-	int OutputThreshold = 128;
+	int InputThreshold = 16;
+	int OutputThreshold = 16;
 	int DescriptorCountDone = 0;
 	int DescriptorPendingCount = 0;
 	int DescriptorDoneTimeout = 10;
@@ -314,15 +325,12 @@ void mtk_initialize(struct mtk_device *mtk)
 
          writel((DescriptorCountDone & GENMASK(10, 0)) |
 		((DescriptorPendingCount & GENMASK(10, 0)) << 16) |
-		((DescriptorDoneTimeout  & GENMASK(6, 0)) << 26) |
-		BIT(31), mtk->base + EIP93_REG_PE_RING_THRESH);
+		((DescriptorDoneTimeout  & GENMASK(6, 0)) << 26),
+		mtk->base + EIP93_REG_PE_RING_THRESH);
 
 	// Clear/ack all interrupts before disable all
 	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
 	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
-
-	// Activate Interrupts:
-	//writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
 }
 
 /* Allocate Descriptor rings */
@@ -342,7 +350,7 @@ static int mtk_desc_init(struct mtk_device *mtk,
 	cdr->base_end = cdr->base + cdr->offset * (MTK_RING_SIZE - 1);
 	cdr->read  = cdr->base;
 
-	dev_info(mtk->dev, "CD Ring : %08X\n", cdr->base_dma);
+	dev_dbg(mtk->dev, "CD Ring : %08X\n", cdr->base_dma);
 
 	rdr->offset = sizeof(struct eip93_descriptor_s);
 	rdr->base = dmam_alloc_coherent(mtk->dev, rdr->offset * MTK_RING_SIZE,
@@ -354,7 +362,7 @@ static int mtk_desc_init(struct mtk_device *mtk,
 	rdr->base_end = rdr->base + rdr->offset * (MTK_RING_SIZE - 1);
 	rdr->read  = rdr->base;
 
-	dev_info(mtk->dev, "RD Ring : %08X\n", rdr->base_dma);
+	dev_dbg(mtk->dev, "RD Ring : %08X\n", rdr->base_dma);
 
 	writel((u32)cdr->base_dma, mtk->base + EIP93_REG_PE_CDR_BASE);
 	writel((u32)rdr->base_dma, mtk->base + EIP93_REG_PE_RDR_BASE);
@@ -502,9 +510,10 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	mtk_initialize(mtk);
 
-	ret = mtk_register_algs(mtk);
-
+	/* Init. finished, enable RDR interupt */
 	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
+
+	ret = mtk_register_algs(mtk);
 
 	dev_info(mtk->dev, "Init succesfull\n");
 
@@ -514,6 +523,10 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 static int mtk_crypto_remove(struct platform_device *pdev)
 {
 	struct mtk_device *mtk = platform_get_drvdata(pdev);
+
+	// Clear/ack all interrupts before disable all
+	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
+	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
 
 	destroy_workqueue(mtk->ring[0].workqueue);
 

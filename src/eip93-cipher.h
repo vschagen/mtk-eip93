@@ -14,14 +14,12 @@ struct mtk_cipher_ctx {
 	u8							key[AES_MAX_KEY_SIZE];
 	u32							keylen;
 	struct crypto_skcipher		*fallback;
-	struct saRecord_s			*saRecord;
-	dma_addr_t					saRecord_base;
-	bool						valid;
 
 };
 
 struct mtk_cipher_reqctx {
 	unsigned long			flags;
+	int						blksize;
 	/* copy in case of mis-alignment */
 	struct scatterlist		*sg_src;
 	struct scatterlist		*sg_dst;
