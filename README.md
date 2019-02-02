@@ -6,11 +6,9 @@ available in the Mediatek MT7621 SoC.
 It enables hardware crypto for DES-ECB/CBC, 3DES-ECB/CBC and 
 AES-ECB/CBC with 128/192/256 keysize.
 
-refactored code: passes internal Kernel-selftest now
-DES/3DES todo: check for weak keys.
+DES/3DES (todo: check for weak keys.)
 
-AES-CTR (128/192/256) todo: handle counter overflow.
-
+AES-CTR (128/192/256)
 
 This should be added to your device DTS or better yet to the mt7621.dtsi:
 
@@ -26,11 +24,15 @@ This should be added to your device DTS or better yet to the mt7621.dtsi:
 
 Work in progress at the moment: Still need work / cleanup
 
+Rebased code on EIP-197 Safexcel code.
+
+BUG: crypto-blocks > PAGE_SIZE fail !!
+
+TODO:
+
 MD5 / SHA1 / SHA 224 / SHA 256
 
 HMAC( MD5 / SHA1 / SHA224 / SSH 256)
-
-TODO:
 
 Authentication:
 

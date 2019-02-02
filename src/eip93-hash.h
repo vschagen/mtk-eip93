@@ -1,14 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2018 Richard van Schagen. All rights reserved.
+ * Copyright (C) 2019
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Richard van Schagen <vschagen@cs.com>
  */
 
 #ifndef _SHA_H_
@@ -23,46 +17,47 @@
 #define MTK_SHA_MAX_BLOCKSIZE		SHA256_BLOCK_SIZE
 #define MTK_SHA_MAX_DIGESTSIZE		SHA256_DIGEST_SIZE
 
-struct mtk_sha_ctx {
-	u8 authkey[MTK_SHA_MAX_BLOCKSIZE];
+struct mtk_ahash_ctx {
+	struct mtk_context base;
+	struct mtk_device *mtk;
+
+	u32 alg;
+
+	u32 ipad[SHA256_DIGEST_SIZE / sizeof(u32)];
+	u32 opad[SHA256_DIGEST_SIZE / sizeof(u32)];
 };
 
-/**
- * struct mtk_sha_reqctx - holds private ahash objects per request
- * @buf: used during update, import and export
- * @tmpbuf: buffer for internal use
- * @digest: calculated digest buffer
- * @buflen: length of the buffer
- * @flags: operation flags
- * @src_orig: original request sg list
- * @nbytes_orig: original request number of bytes
- * @src_nents: source number of entries
- * @byte_count: byte count
- * @count: save count in states during update, import and export
- * @first_blk: is it the first block
- * @last_blk: is it the last block
- * @sg: used to chain sg lists
- * @authkey: pointer to auth key in sha ctx
- * @authklen: auth key length
- * @result_sg: scatterlist used for result buffer
- */
-struct mtk_sha_reqctx {
-	u8 buf[MTK_SHA_MAX_BLOCKSIZE];
-	u8 tmpbuf[MTK_SHA_MAX_BLOCKSIZE];
-	u8 digest[MTK_SHA_MAX_DIGESTSIZE];
-	unsigned int buflen;
-	unsigned long flags;
-	struct scatterlist *src_orig;
-	unsigned int nbytes_orig;
-	int src_nents;
-	__be32 byte_count[2];
-	u64 count;
-	bool first_blk;
-	bool last_blk;
-	struct scatterlist sg[2];
-	u8 *authkey;
-	unsigned int authklen;
-	struct scatterlist result_sg;
+struct mtk_ahash_req {
+	bool last_req;
+	bool finish;
+	bool hmac;
+	bool needs_inv;
+	int	flags;
+
+	int nents;
+	dma_addr_t	result_dma;
+
+	u32 digest;
+
+	u8 state_sz;    /* expected sate size, only set once */
+	u32 state[SHA256_DIGEST_SIZE / sizeof(u32)];
+
+	u64 len[2];
+	u64 processed[2];
+
+	u8 cache[SHA256_BLOCK_SIZE] __aligned(sizeof(u32));
+	dma_addr_t	cache_dma;
+	unsigned int cache_sz;
+
+	u8 cache_next[SHA256_BLOCK_SIZE] __aligned(sizeof(u32));
+};
+
+struct mtk_ahash_export_state {
+	u64 len;
+	u64 processed;
+
+	u32 state[SHA256_DIGEST_SIZE / sizeof(u32)];
+	u8 cache[SHA256_BLOCK_SIZE];
 };
 
 static inline struct mtk_alg_template *to_ahash_tmpl(struct crypto_tfm *tfm)

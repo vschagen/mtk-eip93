@@ -1,20 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2018 Richard van Schagen. All rights reserved.
+ * Copyright (C) 2019
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Richard van Schagen <vschagen@cs.com>
  */
-
 #ifndef _CORE_H_
 #define _CORE_H_
 
-#include <linux/timex.h>
+struct mtk_work_data {
+	struct work_struct	work;
+	struct mtk_device	*mtk;
+};
+
 
 /**
  * struct mtk_device - crypto engine device structure
@@ -34,36 +31,15 @@
 struct mtk_device {
 	void __iomem			*base;
 	struct device			*dev;
-	struct clk			*clk;
-	int				irq;
+	struct clk				*clk;
+	int						irq;
 
-	struct eip93DescpHandler_s	*cd;
-	struct eip93DescpHandler_s	*rd;
-	dma_addr_t			phy_cd;
-	dma_addr_t			phy_rd;
-	dma_addr_t			phy_rec;
-	dma_addr_t			phy_state;
-	dma_addr_t			phy_record;
-
-	struct crypto_queue		queue;
-//	struct tasklet_struct		done_tasklet;
-//	struct tasklet_struct		queue_tasklet;
-	unsigned int			rec_front_idx;
-	unsigned int			rec_rear_idx;
-	struct mtk_dma_rec		*rec;
-
-	struct saState_s		*saState;
+	struct mtk_ring			*ring;
 	struct saRecord_s		*saRecord;
-
-	int				result;
-	int				count;
-	
+	struct saState_s		*saState;
+	dma_addr_t				saState_base;
+	dma_addr_t				saRecord_base;
 	unsigned int			seed[8];
-
-	int (*async_req_enqueue)(struct mtk_device *mtk,
-				 struct crypto_async_request *req);
-	void (*async_req_done)(struct mtk_device *mtk, int ret);
-	spinlock_t			lock;
 };
 
 /**
@@ -77,18 +53,65 @@ struct mtk_dma_rec {
 	unsigned int			srcDma;
 	unsigned int			dstDma;
 	unsigned int			dmaLen;
-	unsigned int			saddr;
-	unsigned int			daddr;
-	unsigned int			ssize;
-	unsigned int			dsize;
 	unsigned int			flags;
 	unsigned int			*req;
 	unsigned int			result;
 };
 
+struct mtk_desc_ring {
+	void		*base;
+	void		*base_end;
+	dma_addr_t	base_dma;
+
+	/* write and read pointers */
+	void		*read;
+	void		*write;
+
+	/* descriptor element offset */
+	unsigned	offset;
+};
+
+struct mtk_ring {
+	spinlock_t					lock;
+
+	struct workqueue_struct		*workqueue;
+	struct mtk_work_data		work_data;
+
+	/* command/result rings */
+	struct mtk_desc_ring		cdr;
+	struct mtk_desc_ring		rdr;
+
+	/* descriptor scatter/gather record */
+	struct mtk_dma_rec			*cdr_dma;
+
+	/* queue */
+	struct crypto_queue			queue;
+	spinlock_t					queue_lock;
+
+	/* Number of request in the engine. */
+	int							requests;
+
+	/* The rings is handling at least one request */
+	bool						busy;
+
+	/* Store for current request wehn not
+	 * enough resources avialable.
+	 */
+	struct crypto_async_request	*req;
+	struct crypto_async_request	*backlog;
+};
+
+struct mtk_context {
+	int (*send)(struct crypto_async_request *req, int *commands,
+				int *results);
+	int (*handle_result)(struct mtk_device *mtk,
+				struct crypto_async_request *req,
+				bool *complete,  int *ret);
+};
+
 struct mtk_cipher_drv {
-	struct list_head	dev_list;
-	spinlock_t		lock;
+	struct list_head		dev_list;
+	spinlock_t			lock;
 };
 
 static struct mtk_cipher_drv mtk_cipher = {

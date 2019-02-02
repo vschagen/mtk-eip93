@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2006-2018 OpenWrt.org
+# Copyright (C) 2006-2019 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=mtk-eip93
-PKG_RELEASE:=0.2
+PKG_RELEASE:=0.3
 
 include $(INCLUDE_DIR)/package.mk
 

@@ -1,19 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2018 Richard van Schagen. All rights reserved.
+ * Copyright (C) 2019
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Richard van Schagen <vschagen@cs.com>
  */
 
 #include "eip93-common.h"
 #include "eip93-regs.h"
 #include "eip93-prng.h"
+#include "eip93-ring.h"
 
 static LIST_HEAD(rng_algs);
 
@@ -28,9 +23,9 @@ static LIST_HEAD(rng_algs);
  */
 bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
 {
-    int i, ctr;
-    eip93DescpHandler_t *EIP93_CmdDscr;
-    eip93DescpHandler_t *EIP93_ResDscr;
+    int i;
+    struct eip93_descriptor_s *cdesc;
+    struct eip93_descriptor_s *rdesc;
     unsigned int GetCount = 0;
     int LoopLimiter = 2500;
     saRecord_t *saRecord;
@@ -60,15 +55,13 @@ bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
     
     // Create SA and State records
     saRecord = (saRecord_t *) dma_zalloc_coherent(mtk->dev,
-                                                  sizeof(saRecord_t), &saPhyAddr, GFP_KERNEL);
+						sizeof(saRecord_t), &saPhyAddr, GFP_KERNEL);
     if (unlikely(saRecord == NULL))
     {
         dev_err(mtk->dev, "!!dma_alloc for saRecord_prepare failed!! \n\n");
         return -ENOMEM;
     }
     
-    //printk("SaState: %d, SaRecord: %d\n",sizeof(saState_t), sizeof(saRecord_t));
-    //           56            128
     // Fill in SA for PRNG Init
     saRecord->saCmd0.word = 0x00001307;   // SA word 0
     saRecord->saCmd1.word = 0x02000000;   // SA word 1
@@ -80,23 +73,24 @@ bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
     }
     
     // Fill in command descriptor
-    ctr = mtk->rec_rear_idx;
-    
-    EIP93_CmdDscr = &mtk->cd[ctr];
-    EIP93_CmdDscr->peCrtlStat.bits.prngMode = 1; // PRNG Init function
-    EIP93_CmdDscr->srcAddr = (u32)SrcPhyAddr;
-    EIP93_CmdDscr->dstAddr = (u32)DstPhyAddr;
-    EIP93_CmdDscr->saAddr = (u32)saPhyAddr;
-    EIP93_CmdDscr->peCrtlStat.bits.hostReady= 1;
-    EIP93_CmdDscr->peCrtlStat.bits.peReady= 0;
-    EIP93_CmdDscr->peLength.bits.hostReady= 1;
-    EIP93_CmdDscr->peLength.bits.peReady= 0;
+	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].cdr);
+	memset(cdesc, 0, sizeof(struct eip93_descriptor_s));
+	rdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].rdr);	
+	cdesc->peCrtlStat.bits.prngMode = 1; // PRNG Init function
+	cdesc->srcAddr = (u32)SrcPhyAddr;
+	cdesc->dstAddr = (u32)DstPhyAddr;
+	cdesc->saAddr = (u32)saPhyAddr;
+	cdesc->peCrtlStat.bits.hostReady= 1;
+	cdesc->peCrtlStat.bits.peReady= 0;
+	cdesc->peLength.bits.hostReady= 1;
+	cdesc->peLength.bits.peReady= 0;
   
 	writel(0xffffffff, mtk->base + EIP93_REG_INT_CLR);
 	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
   
     // now wait for the result descriptor
     writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
+
     // normally this will we get the result descriptors in no-time
     while(LoopLimiter > 0)
     {
@@ -113,28 +107,20 @@ bool mtk_prng_activate (struct mtk_device *mtk, bool fLongSA)
         printk("EIP93 PRNG could not retrieve a result descriptor\n");
         goto fail;
     }
-    ctr = mtk->rec_front_idx;
-    
-    EIP93_ResDscr = &mtk->rd[ctr];
-    writel(1, mtk->base + EIP93_REG_PE_RD_COUNT);
-    
-    if (EIP93_ResDscr->peCrtlStat.bits.errStatus == 0) {
-        dma_free_coherent(mtk->dev, sizeof(saRecord_t), saRecord, saPhyAddr);
-        dma_unmap_single(mtk->dev, SrcPhyAddr, 4080,
-                         DMA_TO_DEVICE);
-        dma_unmap_single(mtk->dev, DstPhyAddr, 4080,
-                         DMA_FROM_DEVICE);
-        kfree(SrcBuffer);
-        kfree(DstBuffer);
-        dev_info(mtk->dev, "PRNG Initialized.\n");
-        
-        mtk->rec_rear_idx++;
-        mtk->rec_front_idx++;
-	// Activate Interrupts:
-	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
 
-        
-        return true; // success
+    writel(1, mtk->base + EIP93_REG_PE_RD_COUNT);    
+	cdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].cdr);
+	rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr);
+
+	dma_free_coherent(mtk->dev, sizeof(saRecord_t), saRecord, saPhyAddr);
+	dma_unmap_single(mtk->dev, SrcPhyAddr, 4080, DMA_TO_DEVICE);
+	dma_unmap_single(mtk->dev, DstPhyAddr, 4080, DMA_FROM_DEVICE);
+	kfree(SrcBuffer);
+	kfree(DstBuffer);
+
+	if (rdesc->peCrtlStat.bits.errStatus == 0) {
+		dev_info(mtk->dev, "PRNG Initialized.\n");
+		return true; // success
     }
     
 fail:
@@ -169,21 +155,19 @@ int mtk_prng_generate(struct crypto_rng *tfm, const u8 *src,
 {
 	struct mtk_alg_template *tmpl = to_prng_tmpl(tfm);
 	struct mtk_device *mtk = tmpl->mtk;
-	eip93DescpHandler_t *EIP93_CmdDscr;
-	eip93DescpHandler_t *EIP93_ResDscr;
+	eip93_descriptor_t *cdesc;
+	eip93_descriptor_t *rdesc;
 	int LoopLimiter = 2500;
 	saRecord_t *saRecord;
 	dma_addr_t saPhyAddr;
 	u32 *SrcBuffer = (u32 *)src;
 	u32 *DstBuffer = (u32 *)dst;
 	dma_addr_t SrcPhyAddr, DstPhyAddr;
-	int GetCount, ctr;
+	int GetCount;
 
 	if (!mtk) {
 		return -ENODEV;
 	}
-
-	ctr = (mtk->rec_rear_idx + 1) % MTK_RING_SIZE;
 
 	SrcPhyAddr = (u32)dma_map_single(mtk->dev, (void *)SrcBuffer, slen,
 			DMA_BIDIRECTIONAL);
@@ -205,17 +189,17 @@ int mtk_prng_generate(struct crypto_rng *tfm, const u8 *src,
 	saRecord->saCmd1.word = 0x02000000;   // SA word 1
 
 	// Fill in command descriptor
-	EIP93_CmdDscr = &mtk->cd[ctr];
+	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].cdr);
 
-	EIP93_CmdDscr->peCrtlStat.bits.prngMode = 2; // for now disregard src
-	EIP93_CmdDscr->srcAddr = (u32)SrcPhyAddr;
-	EIP93_CmdDscr->dstAddr = (u32)DstPhyAddr;
-	EIP93_CmdDscr->saAddr = (u32)saPhyAddr;
-	EIP93_CmdDscr->peCrtlStat.bits.hostReady= 1;
-	EIP93_CmdDscr->peCrtlStat.bits.peReady= 0;
-	EIP93_CmdDscr->peLength.bits.length = dlen; //requested bytes
-	EIP93_CmdDscr->peLength.bits.hostReady= 1;
-	EIP93_CmdDscr->peLength.bits.peReady= 0;
+	cdesc->peCrtlStat.bits.prngMode = 2; // for now disregard src
+	cdesc->srcAddr = (u32)SrcPhyAddr;
+	cdesc->dstAddr = (u32)DstPhyAddr;
+	cdesc->saAddr = (u32)saPhyAddr;
+	cdesc->peCrtlStat.bits.hostReady= 1;
+	cdesc->peCrtlStat.bits.peReady= 0;
+	cdesc->peLength.bits.length = dlen; //requested bytes
+	cdesc->peLength.bits.hostReady= 1;
+	cdesc->peLength.bits.peReady= 0;
 
 	// now wait for the result descriptor
 	writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
@@ -231,31 +215,25 @@ int mtk_prng_generate(struct crypto_rng *tfm, const u8 *src,
 	cpu_relax();
 	}
 
-	mtk->rec_rear_idx = (mtk->rec_rear_idx + 1) % MTK_RING_SIZE;
-	mtk->rec_front_idx = (mtk->rec_front_idx + 1) % MTK_RING_SIZE;
-
 	if (LoopLimiter <= 0) {
 		printk("PRNG: couldn't retrieve result descriptor\n");
 	goto fail;
 	}
 
-	EIP93_ResDscr = &mtk->rd[ctr];
+	rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr);
 
-	if (EIP93_ResDscr->peCrtlStat.bits.errStatus > 0)
+	if (rdesc->peCrtlStat.bits.errStatus > 0)
 		goto fail;
 
 	dma_free_coherent(mtk->dev, dlen, saRecord, saPhyAddr);
-	dma_unmap_single(mtk->dev, SrcPhyAddr, dlen,
-			DMA_TO_DEVICE);
-	dma_unmap_single(mtk->dev, DstPhyAddr, dlen,
-			DMA_FROM_DEVICE);
+	dma_unmap_single(mtk->dev, SrcPhyAddr, dlen, DMA_TO_DEVICE);
+	dma_unmap_single(mtk->dev, DstPhyAddr, dlen, DMA_FROM_DEVICE);
 
 	return 0;
 
 fail:
 	return false;
 }
-
 
 static void mtk_prng_unregister(struct mtk_device *mtk)
 {
@@ -275,7 +253,12 @@ static int mtk_prng_register(struct mtk_device *mtk)
 	int ret;
 
 	// Initilaize the PRNG in AUTO Mode
-	mtk_prng_activate(mtk, true);
+	ret = mtk_prng_activate(mtk, true);
+
+	if (!ret) {
+		printk("PRNG not activated\n");
+		return 0;
+	}
 
 	tmpl = kzalloc(sizeof(*tmpl), GFP_KERNEL);
 	if (!tmpl)
