@@ -228,14 +228,8 @@ static dma_addr_t mtk_set_saRecord(struct mtk_device *mtk, struct mtk_cipher_ctx
 	if IS_HMAC(flags)
 		saRecord->saCmd1.bits.hmac = 1;
 
-	if IS_AES(flags) {
-		if (ctx->keylen == AES_KEYSIZE_256)
-			saRecord->saCmd1.bits.aesKeyLen = 4;
-		else if (ctx->keylen == AES_KEYSIZE_192)
-			saRecord->saCmd1.bits.aesKeyLen = 3;
-		else
-			saRecord->saCmd1.bits.aesKeyLen = 2;
-	}
+	if IS_AES(flags)
+		saRecord->saCmd1.bits.aesKeyLen = ctx->keylen >> 3;
 
 	saRecord->saCmd1.bits.seqNumCheck = 0; // no Seq Num Check
 
