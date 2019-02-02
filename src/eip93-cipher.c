@@ -183,8 +183,10 @@ static dma_addr_t mtk_set_saRecord(struct mtk_device *mtk, struct mtk_cipher_ctx
 	if IS_3DES(flags)
 		saRecord->saCmd0.bits.cipher = 0x1;
 
-	if IS_AES(flags)
+	if IS_AES(flags) {
 		saRecord->saCmd0.bits.cipher = 0x3;
+		saRecord->saCmd1.bits.aesKeyLen = ctx->keylen >> 3;
+	}
 
 	if IS_HASH(flags)
 		saRecord->saCmd0.bits.saveHash = 1;
@@ -212,9 +214,6 @@ static dma_addr_t mtk_set_saRecord(struct mtk_device *mtk, struct mtk_cipher_ctx
 
 	if IS_HMAC(flags)
 		saRecord->saCmd1.bits.hmac = 1;
-
-	if IS_AES(flags)
-		saRecord->saCmd1.bits.aesKeyLen = ctx->keylen >> 3;
 
 	memcpy(saRecord->saKey, ctx->key, ctx->keylen);
 
