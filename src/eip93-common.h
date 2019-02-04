@@ -217,18 +217,4 @@ typedef struct eip93_descriptor_s
 	peLength_t		peLength;
 } eip93_descriptor_t;
 
-struct mtk_alg_template {
-	struct list_head entry;
-	u32 crypto_alg_type;
-	unsigned long alg_flags;
-	int alg_blksize;
-	const u32 *std_iv;
-	union {
-		struct crypto_alg crypto;
-		struct ahash_alg ahash;
-		struct rng_alg rng;
-	} alg;
-	struct mtk_device *mtk;
-};
-
 #endif /* _COMMON_H_ */

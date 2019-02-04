@@ -10,7 +10,6 @@
 #include "eip93-prng.h"
 #include "eip93-ring.h"
 
-static LIST_HEAD(rng_algs);
 
 /*----------------------------------------------------------------------------
  * mtk_prng_activate
@@ -126,12 +125,10 @@ fail:
 int mtk_prng_seed(struct crypto_rng *tfm, const u8 *seed,
 		       unsigned int slen)
 {
-	struct mtk_alg_template *algt;
 	struct rng_alg *alg = crypto_rng_alg(tfm);
-	struct mtk_device *mtk;
-
-	algt = container_of(alg, struct mtk_alg_template, alg.rng);
-	mtk = algt->mtk;
+	struct mtk_alg_template *tmpl = container_of(alg,
+				struct mtk_alg_template, alg.rng);
+	struct mtk_device *mtk = tmpl->mtk;
 
 	// TODO actually reseed PRNG, store seed for now
 	if (slen <= 32)
@@ -150,7 +147,9 @@ int mtk_prng_seed(struct crypto_rng *tfm, const u8 *seed,
 int mtk_prng_generate(struct crypto_rng *tfm, const u8 *src,
 			   unsigned int slen, u8 *dst, unsigned int dlen)
 {
-	struct mtk_alg_template *tmpl = to_prng_tmpl(tfm);
+	struct rng_alg *alg = crypto_rng_alg(tfm);
+	struct mtk_alg_template *tmpl = container_of(alg,
+				struct mtk_alg_template, alg.rng);
 	struct mtk_device *mtk = tmpl->mtk;
 	eip93_descriptor_t *cdesc;
 	eip93_descriptor_t *rdesc;
@@ -232,73 +231,22 @@ fail:
 	return false;
 }
 
-static void mtk_prng_unregister(struct mtk_device *mtk)
-{
-	struct mtk_alg_template *tmpl, *n;
-
-	list_for_each_entry_safe(tmpl, n, &rng_algs, entry) {
-		crypto_unregister_rng(&tmpl->alg.rng);
-		list_del(&tmpl->entry);
-		kfree(tmpl);
-	}
-}
-
-static int mtk_prng_register(struct mtk_device *mtk)
-{
-	struct mtk_alg_template *tmpl;
-	struct rng_alg *alg;
-	int ret;
-
-	// Initilaize the PRNG in AUTO Mode
-	ret = mtk_prng_activate(mtk, true);
-
-	if (!ret) {
-		printk("PRNG not activated\n");
-		return 0;
-	}
-
-	tmpl = kzalloc(sizeof(*tmpl), GFP_KERNEL);
-	if (!tmpl)
-		return -ENOMEM;
-
-	alg = &tmpl->alg.rng;
-
-	alg->generate			= mtk_prng_generate;
-	alg->seed				= mtk_prng_seed;
-	alg->seedsize			= 0;
-
-	snprintf(alg->base.cra_name, CRYPTO_MAX_ALG_NAME, "%s", "stdrng");
-	snprintf(alg->base.cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
-		 "eip93-prng");
-
-	alg->base.cra_priority		= 300;
-	alg->base.cra_ctxsize		= 0; //sizeof(struct mtk_prng_ctx);
-	alg->base.cra_module		= THIS_MODULE;
-//	alg->base.cra_init		= mtk_prng_kcapi_init;
-
-
-	INIT_LIST_HEAD(&tmpl->entry);
-	tmpl->crypto_alg_type = CRYPTO_ALG_TYPE_RNG;
-	tmpl->alg_flags = 0; // TODO
-	tmpl->mtk = mtk;
-
-	ret = crypto_register_rng(alg);
-
-	if (ret) {
-		kfree(tmpl);
-		dev_err(mtk->dev, "%s registration failed\n", alg->base.cra_name);
-		return ret;
-	}
-
-	list_add_tail(&tmpl->entry, &rng_algs);
-	dev_dbg(mtk->dev, "%s is registered\n", alg->base.cra_name);
-	return 0;
-}
-
-const struct mtk_algo_ops prng_ops = {
-	.type = CRYPTO_ALG_TYPE_RNG,
-	.register_algs = mtk_prng_register,
-	.unregister_algs = mtk_prng_unregister,
+struct mtk_alg_template mtk_alg_prng= {
+	.type = MTK_ALG_TYPE_PRNG,
+	.flags = 0,
+	.alg.rng = {
+		.generate = mtk_prng_generate,
+		.seed = mtk_prng_seed,
+		.seedsize = 0,
+		.base = {
+			.cra_name = "stdrng",
+			.cra_driver_name = "eip93-prng",
+			.cra_priority = 300,
+			.cra_ctxsize = 0,
+			.cra_module = THIS_MODULE,
+		},
+	},
 };
+
 
 

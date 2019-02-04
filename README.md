@@ -8,8 +8,6 @@ It enables hardware crypto for:
 * 3DES-ECB/CBC
 * AES-ECB/CBC/CTR with 128/192/256 keysize.
 
-DES/3DES (todo: check for weak keys)
-
 This should be added to your device DTS or better yet to the mt7621.dtsi:
 
 	crypto: crypto@1E004000 {
@@ -25,6 +23,8 @@ This should be added to your device DTS or better yet to the mt7621.dtsi:
 Work in progress at the moment: Still need work / cleanup
 
 Rebased code on EIP-197 Safexcel code.
+
+Removed depreciated ABLKCIPHER API and use SKCIPHER now.
 
 BUG:crypto-blocks > PAGE_SIZE fail !!
 	work around (while continue developing hash portion):

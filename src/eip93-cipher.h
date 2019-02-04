@@ -14,7 +14,12 @@ struct mtk_cipher_ctx {
 	u8							key[AES_MAX_KEY_SIZE];
 	u32							keylen;
 	struct crypto_skcipher		*fallback;
-
+	bool						aead;
+	/* AEAD specific */
+	u32							hash_alg;
+	u32							state_sz;
+	u32							ipad[SHA256_DIGEST_SIZE / sizeof(u32)];
+	u32							opad[SHA256_DIGEST_SIZE / sizeof(u32)];
 };
 
 struct mtk_cipher_reqctx {
@@ -27,13 +32,5 @@ struct mtk_cipher_reqctx {
 	struct scatterlist		ctr_src[2];
 	struct scatterlist		ctr_dst[2];
 };
-
-static inline struct mtk_alg_template *to_cipher_tmpl(struct crypto_tfm *tfm)
-{
-	struct crypto_alg *alg = tfm->__crt_alg;
-	return container_of(alg, struct mtk_alg_template, alg.crypto);
-}
-
-extern const struct mtk_algo_ops ablkcipher_ops;
 
 #endif /* _CIPHER_H_ */

@@ -60,15 +60,4 @@ struct mtk_ahash_export_state {
 	u8 cache[SHA256_BLOCK_SIZE];
 };
 
-static inline struct mtk_alg_template *to_ahash_tmpl(struct crypto_tfm *tfm)
-{
-	struct crypto_ahash *ahash = __crypto_ahash_cast(tfm);
-	struct ahash_alg *alg = container_of(crypto_hash_alg_common(ahash),
-					     struct ahash_alg, halg);
-
-	return container_of(alg, struct mtk_alg_template, alg.ahash);
-}
-
-extern const struct mtk_algo_ops ahash_ops;
-
 #endif /* _SHA_H_ */

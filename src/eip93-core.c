@@ -5,18 +5,18 @@
  * Richard van Schagen <vschagen@cs.com>
  */
 
-#include <crypto/algapi.h>
-#include <crypto/internal/hash.h>
-#include <crypto/sha.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
-#include <linux/dmapool.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+
+#include <crypto/internal/aead.h>
+#include <crypto/internal/skcipher.h>
+#include <crypto/internal/hash.h>
 
 #include "eip93-common.h"
 #include "eip93-core.h"
@@ -26,43 +26,82 @@
 #include "eip93-cipher.h"
 #include "eip93-hash.h"
 
-static const struct mtk_algo_ops *mtk_ops[] = {
-	&prng_ops,
-	&ablkcipher_ops,
-//	&ahash_ops,
+extern struct mtk_alg_template mtk_alg_ecb_des;
+extern struct mtk_alg_template mtk_alg_cbc_des;
+extern struct mtk_alg_template mtk_alg_ecb_des3_ede;
+extern struct mtk_alg_template mtk_alg_cbc_des3_ede;
+extern struct mtk_alg_template mtk_alg_ecb_aes;
+extern struct mtk_alg_template mtk_alg_cbc_aes;
+extern struct mtk_alg_template mtk_alg_ctr_aes;
+extern struct mtk_alg_template mtk_alg_prng;
+
+static struct mtk_alg_template *mtk_algs[] = {
+	&mtk_alg_ecb_des,
+	&mtk_alg_cbc_des,
+	&mtk_alg_ecb_des3_ede,
+	&mtk_alg_cbc_des3_ede,
+	&mtk_alg_ecb_aes,
+	&mtk_alg_cbc_aes,
+	&mtk_alg_ctr_aes,
+//	&mtk_alg_prng,
 };
-
-static void mtk_unregister_algs(struct mtk_device *mtk)
-{
-	const struct mtk_algo_ops *ops;
-	u32 i;
-
-	for (i = 0; i < ARRAY_SIZE(mtk_ops); i++) {
-		ops = mtk_ops[i];
-		ops->unregister_algs(mtk);
-	}
-}
 
 static int mtk_register_algs(struct mtk_device *mtk)
 {
-	const struct mtk_algo_ops *ops;
-	uint32_t i, ret = -ENODEV;
+	int i, j, ret = 0;
 
-	for (i = 0; i < ARRAY_SIZE(mtk_ops); i++) {
-		ops = mtk_ops[i];
-		ret = ops->register_algs(mtk);
+	for (i = 0; i < ARRAY_SIZE(mtk_algs); i++) {
+		if (mtk_algs[i]->type == MTK_ALG_TYPE_SKCIPHER)
+			ret = crypto_register_skcipher(&mtk_algs[i]->alg.skcipher);
+		else if (mtk_algs[i]->type == MTK_ALG_TYPE_AEAD)
+			ret = crypto_register_aead(&mtk_algs[i]->alg.aead);
+		else if (mtk_algs[i]->type == MTK_ALG_TYPE_AHASH)
+			ret = crypto_register_ahash(&mtk_algs[i]->alg.ahash);
+		else
+			ret = crypto_register_rng(&mtk_algs[i]->alg.rng);
+	
 		if (ret)
-			break;
+			goto fail;
+	}
+
+	return 0;
+
+fail:
+	for (j= 0; j < i; j++) {
+		if (mtk_algs[i]->type == MTK_ALG_TYPE_SKCIPHER)
+			crypto_unregister_skcipher(&mtk_algs[i]->alg.skcipher);
+		else if (mtk_algs[i]->type == MTK_ALG_TYPE_AEAD)
+			crypto_unregister_aead(&mtk_algs[i]->alg.aead);
+		else if (mtk_algs[i]->type == MTK_ALG_TYPE_AHASH)
+			crypto_unregister_ahash(&mtk_algs[i]->alg.ahash);
+		else
+			crypto_unregister_rng(&mtk_algs[i]->alg.rng);
 	}
 
 	return ret;
 }
 
+static void mtk_unregister_algs(struct mtk_device *mtk)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mtk_algs); i++) {
+		if (mtk_algs[i]->type == MTK_ALG_TYPE_SKCIPHER)
+			crypto_unregister_skcipher(&mtk_algs[i]->alg.skcipher);
+		else if (mtk_algs[i]->type == MTK_ALG_TYPE_AEAD)
+			crypto_unregister_aead(&mtk_algs[i]->alg.aead);
+		else if (mtk_algs[i]->type == MTK_ALG_TYPE_AHASH)
+			crypto_unregister_ahash(&mtk_algs[i]->alg.ahash);
+		else
+			crypto_unregister_rng(&mtk_algs[i]->alg.rng);
+	}
+}
+
 static void mtk_push_request(struct mtk_device *mtk)
 {
-	int DescriptorCountDone = 0;
+	int DescriptorCountDone = MTK_RING_SIZE;
 	int DescriptorPendingCount = 0;
-	int DescriptorDoneTimeout = 1;
+	int DescriptorDoneTimeout = 3;
 
 	DescriptorPendingCount = min_t(int, mtk->ring[0].requests, 10);
 
@@ -161,8 +200,11 @@ static inline void mtk_handle_result_descriptor(struct mtk_device *mtk)
 	struct mtk_dma_rec *rec;
 	struct mtk_context *ctx;
 	int ret, i, ndesc, rptr;
-	int nreq = 0, tot_descs = 0;
+	int nreq = 0, tot_descs, handled = 0;
 	bool should_complete;
+
+handle_results:
+	tot_descs = 0;
 
 	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
@@ -198,6 +240,7 @@ static inline void mtk_handle_result_descriptor(struct mtk_device *mtk)
 		}
 
 		tot_descs += ndesc;
+		handled += ndesc;
 	}
 
 acknowledge:
@@ -205,9 +248,11 @@ acknowledge:
 		writel(tot_descs, mtk->base + EIP93_REG_PE_RD_COUNT);
 	}
 
+goto handle_results;
+
 requests_left:
 	spin_lock_bh(&mtk->ring[0].lock);
-	mtk->ring[0].requests -= tot_descs;
+	mtk->ring[0].requests -= handled;
 	mtk_push_request(mtk);
 
 	if (!mtk->ring[0].requests)

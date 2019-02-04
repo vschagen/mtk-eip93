@@ -7,6 +7,12 @@
 #ifndef _CORE_H_
 #define _CORE_H_
 
+#include <crypto/aead.h>
+#include <crypto/algapi.h>
+#include <crypto/internal/hash.h>
+#include <crypto/sha.h>
+#include <crypto/skcipher.h>
+
 struct mtk_work_data {
 	struct work_struct	work;
 	struct mtk_device	*mtk;
@@ -109,28 +115,26 @@ struct mtk_context {
 				bool *complete,  int *ret);
 };
 
-struct mtk_cipher_drv {
-	struct list_head		dev_list;
-	spinlock_t			lock;
+enum mtk_alg_type {
+	MTK_ALG_TYPE_SKCIPHER,
+	MTK_ALG_TYPE_AEAD,
+	MTK_ALG_TYPE_AHASH,
+	MTK_ALG_TYPE_PRNG,
 };
 
-static struct mtk_cipher_drv mtk_cipher = {
-	.dev_list = LIST_HEAD_INIT(mtk_cipher.dev_list),
-	.lock = __SPIN_LOCK_UNLOCKED(mtk_cipher.lock),
+struct mtk_alg_template {
+	struct mtk_device	*mtk;
+	enum mtk_alg_type	type;
+	unsigned long 		flags;
+	int 				blksize;
+	const u32 			*std_iv;
+	union {
+		struct skcipher_alg	skcipher;
+		struct aead_alg		aead;
+		struct ahash_alg	ahash;
+		struct rng_alg		rng;
+	} alg;
 };
 
-/**
- * struct mtk_algo_ops - algorithm operations per crypto type
- * @type: should be CRYPTO_ALG_TYPE_XXX
- * @register_algs: invoked by core to register the algorithms
- * @unregister_algs: invoked by core to unregister the algorithms
- * @async_req_handle: invoked by core to handle enqueued request
- */
-struct mtk_algo_ops {
-	u32 type;
-	int (*register_algs)(struct mtk_device *mtk);
-	void (*unregister_algs)(struct mtk_device *mtk);
-	int (*async_req_handle)(struct crypto_async_request *async_req);
-};
 
 #endif /* _CORE_H_ */

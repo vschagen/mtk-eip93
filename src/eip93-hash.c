@@ -790,8 +790,3 @@ err:
 	return ret;
 }
 
-const struct mtk_algo_ops ahash_ops = {
-	.type = CRYPTO_ALG_TYPE_AHASH,
-	.register_algs = mtk_ahash_register,
-	.unregister_algs = mtk_ahash_unregister,
-};
