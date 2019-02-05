@@ -126,8 +126,6 @@ struct mtk_alg_template {
 	struct mtk_device	*mtk;
 	enum mtk_alg_type	type;
 	unsigned long 		flags;
-	int 				blksize;
-	const u32 			*std_iv;
 	union {
 		struct skcipher_alg	skcipher;
 		struct aead_alg		aead;

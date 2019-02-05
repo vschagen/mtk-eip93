@@ -21,7 +21,7 @@ struct mtk_ahash_ctx {
 	struct mtk_context base;
 	struct mtk_device *mtk;
 
-	u32 alg;
+	struct crypto_shash *shash; // TODO change to ahash
 
 	u32 ipad[SHA256_DIGEST_SIZE / sizeof(u32)];
 	u32 opad[SHA256_DIGEST_SIZE / sizeof(u32)];

@@ -33,6 +33,15 @@ extern struct mtk_alg_template mtk_alg_cbc_des3_ede;
 extern struct mtk_alg_template mtk_alg_ecb_aes;
 extern struct mtk_alg_template mtk_alg_cbc_aes;
 extern struct mtk_alg_template mtk_alg_ctr_aes;
+extern struct mtk_alg_tamplate mtk_alg_sha1;
+extern struct mtk_alg_template mtk_alg_sha224;
+extern struct mtk_alg_template mtk_alg_sha256;
+extern struct mtk_alg_template mtk_alg_hmac_sha1;
+extern struct mtk_alg_template mtk_alg_hmac_sha224;
+extern struct mtk_alg_template mtk_alg_hmac_sha256;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_aes;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_aes;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes;
 extern struct mtk_alg_template mtk_alg_prng;
 
 static struct mtk_alg_template *mtk_algs[] = {
@@ -43,6 +52,15 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_ecb_aes,
 	&mtk_alg_cbc_aes,
 	&mtk_alg_ctr_aes,
+//	&mtk_alg_sha1,
+//	&mtk_alg_sha224,
+//	&mtk_alg_sha256,
+//	&mtk_alg_hmac_sha1,
+//	&mtk_alg_hmac_sha224,
+//	&mtk_alg_hmac_sha256,
+//	&mtk_alg_authenc_hmac_sha1_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_prng,
 };
 
@@ -51,6 +69,8 @@ static int mtk_register_algs(struct mtk_device *mtk)
 	int i, j, ret = 0;
 
 	for (i = 0; i < ARRAY_SIZE(mtk_algs); i++) {
+		mtk_algs[i]->mtk = mtk;
+
 		if (mtk_algs[i]->type == MTK_ALG_TYPE_SKCIPHER)
 			ret = crypto_register_skcipher(&mtk_algs[i]->alg.skcipher);
 		else if (mtk_algs[i]->type == MTK_ALG_TYPE_AEAD)
@@ -125,7 +145,7 @@ static void mtk_dequeue(struct mtk_device *mtk)
 	backlog = mtk->ring[0].backlog;
 	if (req)
 		goto handle_req;
-	
+
 	while (true) {
 		spin_lock_bh(&mtk->ring[0].queue_lock);
 		backlog = crypto_get_backlog(&mtk->ring[0].queue);
@@ -175,7 +195,6 @@ finalize:
 
 	/* Writing new descriptor count starts DMA action */
 	writel(cdesc, mtk->base + EIP93_REG_PE_CD_COUNT);
-//	writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
 }
 
 static void mtk_dequeue_work(struct work_struct *work)
@@ -197,9 +216,8 @@ inline struct crypto_async_request * mtk_rdr_req_get(struct mtk_device *mtk)
 static inline void mtk_handle_result_descriptor(struct mtk_device *mtk)
 { 
 	struct crypto_async_request *req = NULL;
-	struct mtk_dma_rec *rec;
 	struct mtk_context *ctx;
-	int ret, i, ndesc, rptr;
+	int ret, i, ndesc;
 	int nreq = 0, tot_descs, handled = 0;
 	bool should_complete;
 
@@ -213,14 +231,7 @@ handle_results:
 
 	for (i = 0; i < nreq; i++) {
 
-		rptr = mtk_ring_curr_rptr_index(mtk);
-		rec = &mtk->ring[0].cdr_dma[rptr];
-
-		if (rec->flags & BIT(1)) {
-			req = mtk_rdr_req_get(mtk);
-		} else { 
-			break;
-		}
+		req = mtk_rdr_req_get(mtk);
 
 		if (!req)
 				goto acknowledge;
@@ -248,7 +259,7 @@ acknowledge:
 		writel(tot_descs, mtk->base + EIP93_REG_PE_RD_COUNT);
 	}
 
-goto handle_results;
+	goto handle_results;
 
 requests_left:
 	spin_lock_bh(&mtk->ring[0].lock);
@@ -269,10 +280,6 @@ static irqreturn_t mtk_irq_thread(int irq, void *dev_id)
 
 	queue_work(mtk->ring[0].workqueue, &mtk->ring[0].work_data.work);
 
-	// Clear and Enable
-	//writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
-	//writel(BIT(1), mtk->base + EIP93_REG_MASK_ENABLE);
-
 	return IRQ_HANDLED;
 }
 
@@ -283,22 +290,9 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 
 	irq_status = readl(mtk->base + EIP93_REG_INT_MASK_STAT);
 
-	if (irq_status & BIT(0)) {
-		writel(BIT(0), mtk->base + EIP93_REG_INT_CLR);
-		writel(BIT(0), mtk->base + EIP93_REG_MASK_DISABLE);
-		if (mtk->ring[0].requests > 0) {
-			return IRQ_WAKE_THREAD;
-		}
-	}
-
 	if (irq_status & BIT(1)) {
 		writel(BIT(1), mtk->base + EIP93_REG_INT_CLR);
-		if (mtk->ring[0].requests > 0) {
-			//writel(BIT(1), mtk->base + EIP93_REG_MASK_DISABLE);
-			return IRQ_WAKE_THREAD;
-		} else {
-			return IRQ_HANDLED;
-		}
+		return IRQ_WAKE_THREAD;
 	}
 
 
@@ -517,15 +511,7 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	ret = devm_request_threaded_irq(mtk->dev, mtk->irq, mtk_irq_handler,
 					mtk_irq_thread, IRQF_ONESHOT, dev_name(mtk->dev), mtk);
-/*
-	mtk->context_pool = dmam_pool_create("mtk-context", mtk->dev,
-						sizeof(struct mtk_context_record), 1, 0);
 
-	if (!mtk->context_pool) {
-		dev_err(mtk->dev, "No context mem\n");
-		return -ENOMEM;
-	}
-*/
 	mtk->ring = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->ring), GFP_KERNEL);
 
 	if (!mtk->ring) {

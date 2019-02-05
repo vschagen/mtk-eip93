@@ -19,7 +19,6 @@
 #define SHA_PADDING		64
 #define SHA_PADDING_MASK	(SHA_PADDING - 1)
 
-static LIST_HEAD(ahash_algs);
 
 static inline u64 mtk_queue_len(struct mtk_ahash_req *req)
 {
@@ -406,23 +405,74 @@ static int mtk_ahash_import(struct ahash_request *areq, const void *in)
 	return 0;
 }
 
+/* EIP93 can only authenticate with the Hash of the key */
+static int mtk_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
+			  u32 keylen)
+{
+	struct mtk_ahash_ctx *tctx = crypto_ahash_ctx(tfm);
+	size_t bs = crypto_shash_blocksize(ctx->shash);
+	size_t ds = crypto_shash_digestsize(ctx->shash);
+	int err, i;
+
+	SHASH_DESC_ON_STACK(shash, ctx->shash);
+
+	shash->tfm = ctx->shash;
+	shash->flags = crypto_shash_get_flags(ctx->shash) &
+		       CRYPTO_TFM_REQ_MAY_SLEEP;
+
+	if (keylen > bs) {
+		err = crypto_shash_digest(shash, key, keylen, bctx->ipad);
+		if (err)
+			return err;
+		keylen = ds;
+	} else {
+		memcpy(ctx->ipad, key, keylen);
+	}
+
+	memset(ctx->ipad + keylen, 0, bs - keylen);
+	memcpy(ctx->opad, ctx->ipad, bs);
+
+	for (i = 0; i < bs; i++) {
+		ctx->ipad[i] ^= HMAC_IPAD_VALUE;
+		ctx->opad[i] ^= HMAC_OPAD_VALUE;
+	}
+
+	return 0;
+}
+
 static int mtk_ahash_cra_init(struct crypto_tfm *tfm)
 {
 	struct safexcel_ahash_ctx *ctx = crypto_tfm_ctx(tfm);
-	struct mtk_alg_template *tmpl = to_cipher_tmpl(tfm);
-	struct mtk_device *mtk = tmpl->mtk;
-	struct mtk_context_record *ctxr;
-/*
-	struct safexcel_alg_template *tmpl =
-		container_of(__crypto_ahash_alg(tfm->__crt_alg),
-			     struct safexcel_alg_template, alg.ahash);
-*/
+	struct ahash_alg *alg = __crypto_ahash_alg(tfm->__crt_alg) 
+	struct mtk_alg_template *tmpl = container_of(alg,
+			     struct mtk_alg_template, alg.ahash);
+	struct mtk_device*mtk = tmpl->mtk;
+	unsigned long flags = tmpl->flags;
+	char *alg_base;
+
 	ctx->mtk = mtk;
 	ctx->base.send = mtk_ahash_send;
 	ctx->base.handle_result = mtk_ahash_handle_result;
 
 	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
 				 sizeof(struct safexcel_ahash_req));
+
+	if IS_HMAC(flags) {
+		if IS_HASH_SHA1(flags)
+			alg_base = "sha1";
+		if IS_HASH_SHA224(flags)
+			alg_base = "sha224";
+		if IS_HASH_SHA256(flags)
+			alg_base = "sha256";
+
+		ctx->shash = crypto_alloc_shash(alg_base, 0,
+					CRYPTO_ALG_NEED_FALLBACK);
+		if (IS_ERR(ctx->shash)) {
+			dev_err(mtk->dev,
+				"base driver %s could not be loaded.\n", alg_base);
+			return PTR_ERR(ctx->shash);
+		}
+	}
 	return 0;
 }
 
@@ -490,303 +540,181 @@ static void mtk_ahash_complete(struct crypto_async_request *req, int error)
 	complete(&result->completion);
 }
 
-static int mtk_hmac_init_pad(struct ahash_request *areq,
-				  unsigned int blocksize, const u8 *key,
-				  unsigned int keylen, u8 *ipad, u8 *opad)
-{
-	struct mtk_ahash_result result;
-	struct scatterlist sg;
-	int ret, i;
-	u8 *keydup;
 
-	if (keylen <= blocksize) {
-		memcpy(ipad, key, keylen);
-	} else {
-		keydup = kmemdup(key, keylen, GFP_KERNEL);
-		if (!keydup)
-			return -ENOMEM;
-
-		ahash_request_set_callback(areq, CRYPTO_TFM_REQ_MAY_BACKLOG,
-					   mtk_ahash_complete, &result);
-		sg_init_one(&sg, keydup, keylen);
-		ahash_request_set_crypt(areq, &sg, ipad, keylen);
-		init_completion(&result.completion);
-
-		ret = crypto_ahash_digest(areq);
-		if (ret == -EINPROGRESS || ret == -EBUSY) {
-			wait_for_completion_interruptible(&result.completion);
-			ret = result.error;
-		}
-
-		/* Avoid leaking */
-		memzero_explicit(keydup, keylen);
-		kfree(keydup);
-
-		if (ret)
-			return ret;
-
-		keylen = crypto_ahash_digestsize(crypto_ahash_reqtfm(areq));
-	}
-
-	memset(ipad + keylen, 0, blocksize - keylen);
-	memcpy(opad, ipad, blocksize);
-
-	for (i = 0; i < blocksize; i++) {
-		ipad[i] ^= HMAC_IPAD_VALUE;
-		opad[i] ^= HMAC_OPAD_VALUE;
-	}
-
-	return 0;
-}
-
-static int mtk_hmac_init_iv(struct ahash_request *areq,
-				 unsigned int blocksize, u8 *pad, void *state)
-{
-	struct mtk_ahash_result result;
-	struct mtk_ahash_req *req;
-	struct scatterlist sg;
-	int ret;
-
-	ahash_request_set_callback(areq, CRYPTO_TFM_REQ_MAY_BACKLOG,
-				   mtk_ahash_complete, &result);
-	sg_init_one(&sg, pad, blocksize);
-	ahash_request_set_crypt(areq, &sg, pad, blocksize);
-	init_completion(&result.completion);
-
-	ret = crypto_ahash_init(areq);
-	if (ret)
-		return ret;
-
-	req = ahash_request_ctx(areq);
-	req->hmac = true;
-	req->last_req = true;
-
-	ret = crypto_ahash_update(areq);
-	if (ret && ret != -EINPROGRESS)
-		return ret;
-
-	wait_for_completion_interruptible(&result.completion);
-	if (result.error)
-		return result.error;
-
-	return crypto_ahash_export(areq, state);
-}
-
-static int mtk_hmac_setkey(const char *alg, const u8 *key,
-				unsigned int keylen, void *istate, void *ostate)
-{
-	struct ahash_request *areq;
-	struct crypto_ahash *tfm;
-	unsigned int blocksize;
-	u8 *ipad, *opad;
-	int ret;
-
-	tfm = crypto_alloc_ahash(alg, CRYPTO_ALG_TYPE_AHASH,
-				 CRYPTO_ALG_TYPE_AHASH_MASK);
-	if (IS_ERR(tfm))
-		return PTR_ERR(tfm);
-
-	areq = ahash_request_alloc(tfm, GFP_KERNEL);
-	if (!areq) {
-		ret = -ENOMEM;
-		goto free_ahash;
-	}
-
-	crypto_ahash_clear_flags(tfm, ~0);
-	blocksize = crypto_tfm_alg_blocksize(crypto_ahash_tfm(tfm));
-
-	ipad = kzalloc(2 * blocksize, GFP_KERNEL);
-	if (!ipad) {
-		ret = -ENOMEM;
-		goto free_request;
-	}
-
-	opad = ipad + blocksize;
-
-	ret = mtk_hmac_init_pad(areq, blocksize, key, keylen, ipad, opad);
-	if (ret)
-		goto free_ipad;
-
-	ret = mtk_hmac_init_iv(areq, blocksize, ipad, istate);
-	if (ret)
-		goto free_ipad;
-
-	ret = mtk_hmac_init_iv(areq, blocksize, opad, ostate);
-
-free_ipad:
-	kfree(ipad);
-free_request:
-	ahash_request_free(areq);
-free_ahash:
-	crypto_free_ahash(tfm);
-
-	return ret;
-}
-
-static int safexcel_hmac_sha1_setkey(struct crypto_ahash *tfm, const u8 *key,
-				     unsigned int keylen)
-{
-	struct safexcel_ahash_ctx *ctx = crypto_tfm_ctx(crypto_ahash_tfm(tfm));
-	struct safexcel_ahash_export_state istate, ostate;
-	int ret, i;
-
-	ret = safexcel_hmac_setkey("safexcel-sha1", key, keylen, &istate, &ostate);
-	if (ret)
-		return ret;
-
-	for (i = 0; i < SHA1_DIGEST_SIZE / sizeof(u32); i++) {
-		if (ctx->ipad[i] != le32_to_cpu(istate.state[i]) ||
-		    ctx->opad[i] != le32_to_cpu(ostate.state[i])) {
-			ctx->base.needs_inv = true;
-			break;
-		}
-	}
-
-	memcpy(ctx->ipad, &istate.state, SHA1_DIGEST_SIZE);
-	memcpy(ctx->opad, &ostate.state, SHA1_DIGEST_SIZE);
-
-	return 0;
-}
-
-struct mtk_ahash_def {
-	unsigned long flags;
-	const char *name;
-	const char *drv_name;
-	unsigned int digestsize;
-	unsigned int blocksize;
-	unsigned int statesize;
-	const u32 *std_iv;
-};
-
-static const struct mtk_ahash_def ahash_def[] = {
-	{
-		.flags		= MTK_HASH_SHA1,
-		.name		= "sha1",
-		.drv_name	= "eip93-sha1",
-		.digestsize	= SHA1_DIGEST_SIZE,
-		.blocksize	= SHA1_BLOCK_SIZE,
-		.statesize	= sizeof(struct sha1_state),
-		.std_iv		= std_iv_sha1,
-	},
-	{
-		.flags		= MTK_HASH_SHA256,
-		.name		= "sha256",
-		.drv_name	= "eip93-sha256",
-		.digestsize	= SHA256_DIGEST_SIZE,
-		.blocksize	= SHA256_BLOCK_SIZE,
-		.statesize	= sizeof(struct sha256_state),
-		.std_iv		= std_iv_sha256,
-	},
-	{
-		.flags		= MTK_HASH_SHA1 || MTK_HMAC,
-		.name		= "hmac(sha1)",
-		.drv_name	= "eip93-hmac-sha1",
-		.digestsize	= SHA1_DIGEST_SIZE,
-		.blocksize	= SHA1_BLOCK_SIZE,
-		.statesize	= sizeof(struct sha1_state),
-		.std_iv		= std_iv_sha1,
-	},
-	{
-		.flags		= MTK_HASH_SHA224 | MTK_HMAC,
-		.name		= "hmac(sha224)",
-		.drv_name	= "eip93-hmac-sha224",
-		.digestsize	= SHA1_DIGEST_SIZE,
-		.blocksize	= SHA1_BLOCK_SIZE,
-		.statesize	= sizeof(struct sha224_state),
-		.std_iv		= std_iv_sha1,
-	},
-	{
-		.flags		= MTK_HASH_SHA256 | MTK_HMAC,
-		.name		= "hmac(sha256)",
-		.drv_name	= "eip93-hmac-sha256",
-		.digestsize	= SHA256_DIGEST_SIZE,
-		.blocksize	= SHA256_BLOCK_SIZE,
-		.statesize	= sizeof(struct sha256_state),
-		.std_iv		= std_iv_sha256,
+struct mtk_alg_template mtk_alg_sha1 = {
+	.type = MTK_ALG_TYTPE_AHASH,
+	.flags = MTK_HASH_SHA1,
+	.alg.ahash = {
+		.init = mtk_ahash_init,
+		.update = mtk_ahash_update,
+		.final = mtk_ahash_final,
+		.finup = mtk_ahash_finup,
+		.digest= mtk_ahash_digest,
+		.export = mtk_ahash_export,
+		.import = mtk_ahash_import,
+		.halg = {
+			digestsize = SHA1_DIGEST_SIZE,
+			statesize = .sizeof(struct mtk_ahash_export_state),
+			.base = {
+				.cra_name = "sha1",
+				.cra_driver_name = "eip93-sha1",
+				.cra_priority = 300,
+				.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY,
+				.cra_blocksize = SHA1_BLOCK_SIZE,
+				.cra_ctxsize = sizeof(struct mtk_ahash_ctx),
+				.cra_init = mtk_ahash_cra_init,
+				.cra_exit = mtk_ahash_cra_exit,
+				.cra_module = THIS_MODULE,
+			},
+		},
 	},
 };
 
-static int mtk_ahash_register_one(const struct mtk_ahash_def *def,
-				  struct mtk_device *mtk)
-{
-	struct mtk_alg_template *tmpl;
-	struct ahash_alg *alg;
-	struct crypto_alg *base;
-	int ret;
+struct mtk_alg_template mtk_alg_sha224 = {
+	.type = MTK_ALG_TYTPE_AHASH,
+	.flags = MTK_HASH_SHA224,
+	.alg.ahash = {
+		.init = mtk_ahash_init,
+		.update = mtk_ahash_update,
+		.final = mtk_ahash_final,
+		.finup = mtk_ahash_finup,
+		.digest= mtk_ahash_digest,
+		.export = mtk_ahash_export,
+		.import = mtk_ahash_import,
+		.halg = {
+			digestsize = SHA224_DIGEST_SIZE,
+			statesize = .sizeof(struct mtk_ahash_export_state),
+			.base = {
+				.cra_name = "sha224",
+				.cra_driver_name = "eip93-sha224",
+				.cra_priority = 300,
+				.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY,
+				.cra_blocksize = SHA224_BLOCK_SIZE,
+				.cra_ctxsize = sizeof(struct mtk_ahash_ctx),
+				.cra_init = mtk_ahash_cra_init,
+				.cra_exit = mtk_ahash_cra_exit,
+				.cra_module = THIS_MODULE,
+			},
+		},
+	},
+};
 
-	tmpl = kzalloc(sizeof(*tmpl), GFP_KERNEL);
-	if (!tmpl)
-		return -ENOMEM;
+struct mtk_alg_template mtk_alg_sha256 = {
+	.type = MTK_ALG_TYTPE_AHASH,
+	.flags = MTK_HASH_SHA256,
+	.alg.ahash = {
+		.init = mtk_ahash_init,
+		.update = mtk_ahash_update,
+		.final = mtk_ahash_final,
+		.finup = mtk_ahash_finup,
+		.digest= mtk_ahash_digest,
+		.export = mtk_ahash_export,
+		.import = mtk_ahash_import,
+		.halg = {
+			digestsize = SHA256_DIGEST_SIZE,
+			statesize = .sizeof(struct mtk_ahash_export_state),
+			.base = {
+				.cra_name = "sha256",
+				.cra_driver_name = "eip93-sha256",
+				.cra_priority = 300,
+				.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY,
+				.cra_blocksize = SHA256_BLOCK_SIZE,
+				.cra_ctxsize = sizeof(struct mtk_ahash_ctx),
+				.cra_init = mtk_ahash_cra_init,
+				.cra_exit = mtk_ahash_cra_exit,
+				.cra_module = THIS_MODULE,
+			},
+		},
+	},
+};
 
-	tmpl->std_iv = def->std_iv;
+struct mtk_alg_template mtk_alg_hmac_sha1 = {
+	.type = MTK_ALG_TYTPE_AHASH,
+	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1,
+	.alg.ahash = {
+		.init = mtk_ahash_init,
+		.update = mtk_ahash_update,
+		.final = mtk_ahash_final,
+		.finup = mtk_ahash_finup,
+		.digest= mtk_ahash_digest,
+		.setkey = mtk_hmac_setkey,
+		.export = mtk_ahash_export,
+		.import = mtk_ahash_import,
+		.halg = {
+			digestsize = SHA1_DIGEST_SIZE,
+			statesize = .sizeof(struct mtk_ahash_export_state),
+			.base = {
+				.cra_name = "hmac(sha1)",
+				.cra_driver_name = "eip93-hmac-sha1",
+				.cra_priority = 300,
+				.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY,
+				.cra_blocksize = SHA1_BLOCK_SIZE,
+				.cra_ctxsize = sizeof(struct mtk_ahash_ctx),
+				.cra_init = mtk_ahash_cra_init,
+				.cra_exit = mtk_ahash_cra_exit,
+				.cra_module = THIS_MODULE,
+			},
+		},
+	},
+};
 
-	alg = &tmpl->alg.ahash;
-	alg->init = mtk_ahash_init;
-	alg->update = mtk_ahash_update;
-	alg->final = mtk_ahash_final;
-	alg->digest = mtk_ahash_digest;
-	alg->export = mtk_ahash_export;
-	alg->import = mtk_ahash_import;
-	if (IS_HMAC(def->flags))
-		alg->setkey = mtk_hmac_setkey;
-	alg->halg.digestsize = def->digestsize;
-	alg->halg.statesize = def->statesize;
+struct mtk_alg_template mtk_alg_hmac_sha224 = {
+	.type = MTK_ALG_TYTPE_AHASH,
+	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224,
+	.alg.ahash = {
+		.init = mtk_ahash_init,
+		.update = mtk_ahash_update,
+		.final = mtk_ahash_final,
+		.finup = mtk_ahash_finup,
+		.digest= mtk_ahash_digest,
+		.setkey = mtk_hmac_setkey,
+		.export = mtk_ahash_export,
+		.import = mtk_ahash_import,
+		.halg = {
+			digestsize = SHA224_DIGEST_SIZE,
+			statesize = .sizeof(struct mtk_ahash_export_state),
+			.base = {
+				.cra_name = "hmac(sha224)",
+				.cra_driver_name = "eip93-hmac-sha224",
+				.cra_priority = 300,
+				.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY,
+				.cra_blocksize = SHA224_BLOCK_SIZE,
+				.cra_ctxsize = sizeof(struct mtk_ahash_ctx),
+				.cra_init = mtk_ahash_cra_init,
+				.cra_exit = mtk_ahash_cra_exit,
+				.cra_module = THIS_MODULE,
+			},
+		},
+	},
+};
 
-	base = &alg->halg.base;
-	base->cra_blocksize = def->blocksize;
-	base->cra_priority = 300;
-	base->cra_flags = CRYPTO_ALG_ASYNC;
-	base->cra_ctxsize = sizeof(struct mtk_ahash_ctx);
-	base->cra_alignmask = 0;
-	base->cra_module = THIS_MODULE;
-	base->cra_init = mtk_ahash_cra_init;
-	INIT_LIST_HEAD(&base->cra_list);
-
-	snprintf(base->cra_name, CRYPTO_MAX_ALG_NAME, "%s", def->name);
-	snprintf(base->cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
-		 def->drv_name);
-
-	INIT_LIST_HEAD(&tmpl->entry);
-	tmpl->crypto_alg_type = CRYPTO_ALG_TYPE_AHASH;
-	tmpl->alg_flags = def->flags;
-	tmpl->mtk = mtk;
-
-	ret = crypto_register_ahash(alg);
-	if (ret) {
-		kfree(tmpl);
-		dev_err(mtk->dev, "%s registration failed\n", base->cra_name);
-		return ret;
-	}
-
-	list_add_tail(&tmpl->entry, &ahash_algs);
-	dev_dbg(mtk->dev, "%s is registered\n", base->cra_name);
-	return 0;
-}
-
-static void mtk_ahash_unregister(struct mtk_device *mtk)
-{
-	struct mtk_alg_template *tmpl, *n;
-
-	list_for_each_entry_safe(tmpl, n, &ahash_algs, entry) {
-		crypto_unregister_ahash(&tmpl->alg.ahash);
-		list_del(&tmpl->entry);
-		kfree(tmpl);
-	}
-}
-
-static int mtk_ahash_register(struct mtk_device *mtk)
-{
-	int ret, i;
-
-	for (i = 0; i < ARRAY_SIZE(ahash_def); i++) {
-		ret = mtk_ahash_register_one(&ahash_def[i], mtk);
-		if (ret)
-			goto err;
-	}
-
-	return 0;
-err:
-	mtk_ahash_unregister(mtk);
-	return ret;
-}
+struct mtk_alg_template mtk_alg_hmac_sha256 = {
+	.type = MTK_ALG_TYTPE_AHASH,
+	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256,
+	.alg.ahash = {
+		.init = mtk_ahash_init,
+		.update = mtk_ahash_update,
+		.final = mtk_ahash_final,
+		.finup = mtk_ahash_finup,
+		.digest= mtk_ahash_digest,
+		.setkey = mtk_hmac_setkey,
+		.export = mtk_ahash_export,
+		.import = mtk_ahash_import,
+		.halg = {
+			digestsize = SHA1_DIGEST_SIZE,
+			statesize = .sizeof(struct mtk_ahash_export_state),
+			.base = {
+				.cra_name = "hmac(sha256)",
+				.cra_driver_name = "eip93-hmac-sha256",
+				.cra_priority = 300,
+				.cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_KERN_DRIVER_ONLY,
+				.cra_blocksize = SHA1_BLOCK_SIZE,
+				.cra_ctxsize = sizeof(struct mtk_ahash_ctx),
+				.cra_init = mtk_ahash_cra_init,
+				.cra_exit = mtk_ahash_cra_exit,
+				.cra_module = THIS_MODULE,
+			},
+		},
+	},
+};
 
