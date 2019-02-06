@@ -9,17 +9,16 @@
 #define _CIPHER_H_
 
 struct mtk_cipher_ctx {
-	struct mtk_context			base;
-	struct mtk_device			*mtk;
-	u8							key[AES_MAX_KEY_SIZE];
-	u32							keylen;
-	struct crypto_skcipher		*fallback;
-	bool						aead;
+	struct mtk_context		base;
+	struct mtk_device		*mtk;
+	u8						key[AES_MAX_KEY_SIZE];
+	u32						keylen;
+	struct crypto_skcipher	*fallback;
+	bool					aead;
 	/* AEAD specific */
-	u32							hash_alg;
-	u32							state_sz;
-	u32							ipad[SHA256_DIGEST_SIZE / sizeof(u32)];
-	u32							opad[SHA256_DIGEST_SIZE / sizeof(u32)];
+	struct crypto_shash 	*shash; // TODO change to ahash
+	u8						ipad[SHA256_DIGEST_SIZE] __aligned(sizeof(u32));
+	u8						opad[SHA256_DIGEST_SIZE] __aligned(sizeof(u32));
 };
 
 struct mtk_cipher_reqctx {
