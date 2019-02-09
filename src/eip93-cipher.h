@@ -17,16 +17,28 @@ struct mtk_cipher_ctx {
 	bool					aead;
 	/* AEAD specific */
 	struct crypto_shash 	*shash; // TODO change to ahash
-	u8						ipad[SHA256_DIGEST_SIZE] __aligned(sizeof(u32));
-	u8						opad[SHA256_DIGEST_SIZE] __aligned(sizeof(u32));
+	u8						ipad[SHA512_DIGEST_SIZE] __aligned(sizeof(u32));
+	u8						opad[SHA512_DIGEST_SIZE] __aligned(sizeof(u32));
+	unsigned int			*saState1;
+	unsigned int			*saState2;
+	unsigned int			*saRecord;
+	dma_addr_t				src1_base;
+	dma_addr_t				src2_base;
+	int						authsize;
 };
 
 struct mtk_cipher_reqctx {
 	unsigned long			flags;
-	int						blksize;
-	/* copy in case of mis-alignment */
+	int						textsize;
+	/* AEAD */
+	u32						odigest[SHA512_DIGEST_SIZE] __aligned(sizeof(u32));
+	int						assoclen;
+	int						authsize;
+	/* copy in case of mis-alignment or AEAD */
 	struct scatterlist		*sg_src;
+	int						src_nents;
 	struct scatterlist		*sg_dst;
+	int						dst_nents;
 	/* AES-CTR in case of counter overflow */
 	struct scatterlist		ctr_src[2];
 	struct scatterlist		ctr_dst[2];

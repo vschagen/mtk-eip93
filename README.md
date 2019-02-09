@@ -26,6 +26,13 @@ Rebased code on EIP-197 Safexcel code.
 
 Removed depreciated ABLKCIPHER API and use SKCIPHER now.
 
+Need cleanup but seems "in-basic" to work:
+
+Authentication:
+
+AEAD(HMAC(SHA1/224/256),CBC(AES))
+
+
 BUG:crypto-blocks > PAGE_SIZE fail !!
 	work around (while continue developing hash portion):
 	Kernel page_size 16Kb
@@ -38,5 +45,5 @@ HMAC( MD5 / SHA1 / SHA224 / SSH 256)
 
 Authentication:
 
-AEAD(HMAC(y),CBC(x))
+AEAD(HMAC(SHA1/224/256),CBC(AES))
 

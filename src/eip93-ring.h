@@ -24,8 +24,9 @@ void *mtk_ring_curr_wptr(struct mtk_device *mtk);
 void *mtk_ring_curr_rptr(struct mtk_device *mtk);
 
 struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk,
-					struct mtk_dma_rec *rec, dma_addr_t saRecord_base,
-					dma_addr_t saState_base);
+					dma_addr_t srcDma, dma_addr_t dstDma,
+					dma_addr_t saRecord_base, dma_addr_t saState_base,
+					int len, int assoclen, int hashFinal);
 
 struct eip93_descriptor_s *mtk_add_rdesc(struct mtk_device *mtk);
 

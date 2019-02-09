@@ -141,15 +141,15 @@ static int mtk_ahash_send(struct crypto_async_request *async,
 		}
 
 		ctx->base.cache_sz = cache_len;
-		first_cdesc = mtk_add_cdesc(priv, ring, 1,
-						 (cache_len == len),
-						 ctx->base.cache_dma,
-						 cache_len, len,
-						 ctx->base.ctxr_dma);
+		first_cdesc = mtk_add_cdesc(mtk, ctx->base.cache_dma,
+							Result.base, saRecord.base, saState.base,
+							cache_len, 0);
+
 		if (IS_ERR(first_cdesc)) {
 			ret = PTR_ERR(first_cdesc);
 			goto unmap_cache;
 		}
+		rdesc = mtk_add_rdesc(mtk);
 		n_cdesc++;
 
 		queued -= cache_len;
@@ -173,13 +173,14 @@ static int mtk_ahash_send(struct crypto_async_request *async,
 		if (queued - sglen < 0)
 			sglen = queued;
 
-		cdesc = mtk_add_cdesc(priv, ring, !n_cdesc,
-					   !(queued - sglen), sg_dma_address(sg),
-					   sglen, len, ctx->base.ctxr_dma);
+		cdesc = mtk_add_cdesc(mtk, sg_dma_address(sg), Result.base,
+						saRecord.base, saState.base, sglen, 0);
 		if (IS_ERR(cdesc)) {
 			ret = PTR_ERR(cdesc);
 			goto cdesc_rollback;
 		}
+		rdesc = mtk_add_rdesc(mtk);
+
 		n_cdesc++;
 
 		if (n_cdesc == 1)
@@ -191,27 +192,6 @@ static int mtk_ahash_send(struct crypto_async_request *async,
 	}
 
 send_command:
-	/* Setup the context options */
-	safexcel_context_control(ctx, req, first_cdesc, req->state_sz,
-				 crypto_ahash_blocksize(ahash));
-
-	/* Add the token */
-	safexcel_hash_token(first_cdesc, len, req->state_sz);
-
-	ctx->base.result_dma = dma_map_single(priv->dev, areq->result,
-					      req->state_sz, DMA_FROM_DEVICE);
-	if (dma_mapping_error(priv->dev, ctx->base.result_dma)) {
-		ret = -EINVAL;
-		goto cdesc_rollback;
-	}
-
-	/* Add a result descriptor */
-	rdesc = safexcel_add_rdesc(priv, ring, 1, 1, ctx->base.result_dma,
-				   req->state_sz);
-	if (IS_ERR(rdesc)) {
-		ret = PTR_ERR(rdesc);
-		goto cdesc_rollback;
-	}
 
 	spin_unlock_bh(&priv->ring[ring].egress_lock);
 
@@ -246,28 +226,7 @@ static int mtk_ahash_enqueue(struct ahash_request *areq)
 	struct mtk_crypto_priv *priv = ctx->priv;
 	int ret, ring;
 
-/*
-	req->needs_inv = false;
 
-	if (req->processed && ctx->digest == CONTEXT_CONTROL_DIGEST_PRECOMPUTED)
-		ctx->base.needs_inv = safexcel_ahash_needs_inv_get(areq);
-
-	if (ctx->base.ctxr) {
-		if (ctx->base.needs_inv) {
-			ctx->base.needs_inv = false;
-			req->needs_inv = true;
-		}
-	} else {
-		ctx->base.ring = safexcel_select_ring(priv);
-		ctx->base.ctxr = dma_pool_zalloc(priv->context_pool,
-						 EIP197_GFP_FLAGS(areq->base),
-						 &ctx->base.ctxr_dma);
-		if (!ctx->base.ctxr)
-			return -ENOMEM;
-	}
-
-	ring = ctx->base.ring;
-*/
 	spin_lock_bh(&mtk->ring[0].queue_lock);
 	ret = crypto_enqueue_request(&mtk->ring[0].queue, &areq->base);
 	spin_unlock_bh(&mtk->ring[0].queue_lock);
@@ -319,7 +278,7 @@ static int mtk_ahash_update(struct ahash_request *areq)
 	 * We're not doing partial updates when performing an hmac request.
 	 * Everything will be handled by the final() call.
 	 */
-	if (ctx->digest == CONTEXT_CONTROL_DIGEST_HMAC)
+	if (ctx->digest == )
 		return 0;
 
 	if (req->hmac)
@@ -442,7 +401,7 @@ static int mtk_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
 
 static int mtk_ahash_cra_init(struct crypto_tfm *tfm)
 {
-	struct safexcel_ahash_ctx *ctx = crypto_tfm_ctx(tfm);
+	struct mtk_ahash_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct ahash_alg *alg = __crypto_ahash_alg(tfm->__crt_alg) 
 	struct mtk_alg_template *tmpl = container_of(alg,
 			     struct mtk_alg_template, alg.ahash);
@@ -455,7 +414,7 @@ static int mtk_ahash_cra_init(struct crypto_tfm *tfm)
 	ctx->base.handle_result = mtk_ahash_handle_result;
 
 	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
-				 sizeof(struct safexcel_ahash_req));
+				 sizeof(struct mtk_ahash_req));
 
 	if IS_HMAC(flags) {
 		if IS_HASH_SHA1(flags)
@@ -484,18 +443,10 @@ static int mtk_ahash_init(struct ahash_request *areq)
 	memset(req, 0, sizeof(*req));
 
 	
-/*   hardware can init SHAx_Hx values!
-
-	req->state[0] = SHA1_H0;
-	req->state[1] = SHA1_H1;
-	req->state[2] = SHA1_H2;
-	req->state[3] = SHA1_H3;
-	req->state[4] = SHA1_H4;
-
 	ctx->alg = CONTEXT_CONTROL_CRYPTO_ALG_SHA1;
 	ctx->digest = CONTEXT_CONTROL_DIGEST_PRECOMPUTED;
 	req->state_sz = SHA1_DIGEST_SIZE;
-*/
+
 	return 0;
 }
 
@@ -515,13 +466,6 @@ static void mtk_ahash_cra_exit(struct crypto_tfm *tfm)
 	struct mtk_device *mtk = ctx->mtk;
 	int ret;
 
-	/* context not allocated, skip invalidation */
-	if (!ctx->base.ctxr)
-		return;
-
-	ret = safexcel_ahash_exit_inv(tfm);
-	if (ret)
-		dev_warn(mtk->dev, "hash: invalidation error %d\n", ret);
 }
 
 struct mtk_ahash_result {
@@ -542,19 +486,19 @@ static void mtk_ahash_complete(struct crypto_async_request *req, int error)
 
 
 struct mtk_alg_template mtk_alg_sha1 = {
-	.type = MTK_ALG_TYTPE_AHASH,
+	.type = MTK_ALG_TYPE_AHASH,
 	.flags = MTK_HASH_SHA1,
 	.alg.ahash = {
 		.init = mtk_ahash_init,
 		.update = mtk_ahash_update,
 		.final = mtk_ahash_final,
 		.finup = mtk_ahash_finup,
-		.digest= mtk_ahash_digest,
+		.digest = mtk_ahash_digest,
 		.export = mtk_ahash_export,
 		.import = mtk_ahash_import,
 		.halg = {
-			digestsize = SHA1_DIGEST_SIZE,
-			statesize = .sizeof(struct mtk_ahash_export_state),
+			.digestsize = SHA1_DIGEST_SIZE,
+			.statesize = sizeof(struct mtk_ahash_export_state),
 			.base = {
 				.cra_name = "sha1",
 				.cra_driver_name = "eip93-sha1",
@@ -571,7 +515,7 @@ struct mtk_alg_template mtk_alg_sha1 = {
 };
 
 struct mtk_alg_template mtk_alg_sha224 = {
-	.type = MTK_ALG_TYTPE_AHASH,
+	.type = MTK_ALG_TYPE_AHASH,
 	.flags = MTK_HASH_SHA224,
 	.alg.ahash = {
 		.init = mtk_ahash_init,
@@ -582,8 +526,8 @@ struct mtk_alg_template mtk_alg_sha224 = {
 		.export = mtk_ahash_export,
 		.import = mtk_ahash_import,
 		.halg = {
-			digestsize = SHA224_DIGEST_SIZE,
-			statesize = .sizeof(struct mtk_ahash_export_state),
+			.digestsize = SHA224_DIGEST_SIZE,
+			.statesize = sizeof(struct mtk_ahash_export_state),
 			.base = {
 				.cra_name = "sha224",
 				.cra_driver_name = "eip93-sha224",
@@ -600,7 +544,7 @@ struct mtk_alg_template mtk_alg_sha224 = {
 };
 
 struct mtk_alg_template mtk_alg_sha256 = {
-	.type = MTK_ALG_TYTPE_AHASH,
+	.type = MTK_ALG_TYPE_AHASH,
 	.flags = MTK_HASH_SHA256,
 	.alg.ahash = {
 		.init = mtk_ahash_init,
@@ -611,8 +555,8 @@ struct mtk_alg_template mtk_alg_sha256 = {
 		.export = mtk_ahash_export,
 		.import = mtk_ahash_import,
 		.halg = {
-			digestsize = SHA256_DIGEST_SIZE,
-			statesize = .sizeof(struct mtk_ahash_export_state),
+			.digestsize = SHA256_DIGEST_SIZE,
+			.statesize = sizeof(struct mtk_ahash_export_state),
 			.base = {
 				.cra_name = "sha256",
 				.cra_driver_name = "eip93-sha256",
@@ -629,7 +573,7 @@ struct mtk_alg_template mtk_alg_sha256 = {
 };
 
 struct mtk_alg_template mtk_alg_hmac_sha1 = {
-	.type = MTK_ALG_TYTPE_AHASH,
+	.type = MTK_ALG_TYPE_AHASH,
 	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1,
 	.alg.ahash = {
 		.init = mtk_ahash_init,
@@ -641,8 +585,8 @@ struct mtk_alg_template mtk_alg_hmac_sha1 = {
 		.export = mtk_ahash_export,
 		.import = mtk_ahash_import,
 		.halg = {
-			digestsize = SHA1_DIGEST_SIZE,
-			statesize = .sizeof(struct mtk_ahash_export_state),
+			.digestsize = SHA1_DIGEST_SIZE,
+			.statesize = sizeof(struct mtk_ahash_export_state),
 			.base = {
 				.cra_name = "hmac(sha1)",
 				.cra_driver_name = "eip93-hmac-sha1",
@@ -659,7 +603,7 @@ struct mtk_alg_template mtk_alg_hmac_sha1 = {
 };
 
 struct mtk_alg_template mtk_alg_hmac_sha224 = {
-	.type = MTK_ALG_TYTPE_AHASH,
+	.type = MTK_ALG_TYPE_AHASH,
 	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224,
 	.alg.ahash = {
 		.init = mtk_ahash_init,
@@ -671,8 +615,8 @@ struct mtk_alg_template mtk_alg_hmac_sha224 = {
 		.export = mtk_ahash_export,
 		.import = mtk_ahash_import,
 		.halg = {
-			digestsize = SHA224_DIGEST_SIZE,
-			statesize = .sizeof(struct mtk_ahash_export_state),
+			.digestsize = SHA224_DIGEST_SIZE,
+			.statesize = sizeof(struct mtk_ahash_export_state),
 			.base = {
 				.cra_name = "hmac(sha224)",
 				.cra_driver_name = "eip93-hmac-sha224",
@@ -689,7 +633,7 @@ struct mtk_alg_template mtk_alg_hmac_sha224 = {
 };
 
 struct mtk_alg_template mtk_alg_hmac_sha256 = {
-	.type = MTK_ALG_TYTPE_AHASH,
+	.type = MTK_ALG_TYPE_AHASH,
 	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256,
 	.alg.ahash = {
 		.init = mtk_ahash_init,
@@ -701,8 +645,8 @@ struct mtk_alg_template mtk_alg_hmac_sha256 = {
 		.export = mtk_ahash_export,
 		.import = mtk_ahash_import,
 		.halg = {
-			digestsize = SHA1_DIGEST_SIZE,
-			statesize = .sizeof(struct mtk_ahash_export_state),
+			.digestsize = SHA1_DIGEST_SIZE,
+			.statesize = sizeof(struct mtk_ahash_export_state),
 			.base = {
 				.cra_name = "hmac(sha256)",
 				.cra_driver_name = "eip93-hmac-sha256",

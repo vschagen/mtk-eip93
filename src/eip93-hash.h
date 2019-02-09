@@ -23,8 +23,8 @@ struct mtk_ahash_ctx {
 
 	struct crypto_shash *shash; // TODO change to ahash
 
-	u32 ipad[SHA256_DIGEST_SIZE / sizeof(u32)];
-	u32 opad[SHA256_DIGEST_SIZE / sizeof(u32)];
+	u32 ipad[SHA512_DIGEST_SIZE / sizeof(u32)];
+	u32 opad[SHA512_DIGEST_SIZE / sizeof(u32)];
 };
 
 struct mtk_ahash_req {

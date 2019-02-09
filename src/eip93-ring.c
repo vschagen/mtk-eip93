@@ -96,28 +96,42 @@ inline void *mtk_ring_curr_rptr(struct mtk_device *mtk)
 }
 
 struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk,
-					struct mtk_dma_rec *rec, dma_addr_t saRecord_base,
-					dma_addr_t saState_base)
+					dma_addr_t srcDma, dma_addr_t dstDma,
+					dma_addr_t saRecord_base, dma_addr_t saState_base,
+					int len, int assoclen, int hashFinal)
 {
 	struct eip93_descriptor_s *cdesc;
+	struct mtk_desc_buf *buf;
+	int dmaLen;
+	int wptr;
 
 	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].cdr);
 	if (IS_ERR(cdesc))
 		return cdesc;
 
+	wptr = mtk_ring_cdr_index(mtk, cdesc);
+	buf = &mtk->ring[0].dma_buf[wptr];
+
 	memset(cdesc, 0, sizeof(struct eip93_descriptor_s));
 
+	dmaLen = len & GENMASK(20,0);
 	cdesc->peCrtlStat.bits.hostReady = 1;
-	cdesc->peCrtlStat.bits.hashFinal = 0;
+	cdesc->peCrtlStat.bits.hashFinal = hashFinal;
 	cdesc->peCrtlStat.bits.padCrtlStat = 0; //padCrtlStat; pad boundary
 	cdesc->peCrtlStat.bits.peReady = 0;
-	cdesc->srcAddr = rec->srcDma;
-	cdesc->dstAddr = rec->dstDma;
+	cdesc->srcAddr = srcDma;
+	cdesc->dstAddr = dstDma;
 	cdesc->saAddr = saRecord_base;
 	cdesc->stateAddr = saState_base;
 	cdesc->arc4Addr = saState_base;
-	cdesc->peLength.bits.length = (rec->dmaLen) & GENMASK(20, 0);
+	cdesc->peLength.bits.byPass = 0; //assoclen;
+	cdesc->peLength.bits.length = dmaLen;
 	cdesc->peLength.bits.hostReady = 1;
+
+	dma_unmap_addr_set(buf, src_addr, srcDma);
+	dma_unmap_len_set(buf, src_len, dmaLen);
+	dma_unmap_addr_set(buf, dst_addr, dstDma);
+	dma_unmap_len_set(buf, dst_len, dmaLen);
 
 	return cdesc;
 }

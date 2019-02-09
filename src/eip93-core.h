@@ -7,17 +7,18 @@
 #ifndef _CORE_H_
 #define _CORE_H_
 
+#include <linux/dma-mapping.h>
 #include <crypto/aead.h>
 #include <crypto/algapi.h>
 #include <crypto/internal/hash.h>
 #include <crypto/sha.h>
 #include <crypto/skcipher.h>
 
+
 struct mtk_work_data {
 	struct work_struct	work;
 	struct mtk_device	*mtk;
 };
-
 
 /**
  * struct mtk_device - crypto engine device structure
@@ -56,12 +57,19 @@ struct mtk_device {
  * @req: holds the async_request
  */
 struct mtk_dma_rec {
-	unsigned int			srcDma;
-	unsigned int			dstDma;
-	unsigned int			dmaLen;
-	unsigned int			flags;
-	unsigned int			*req;
-	unsigned int			result;
+	unsigned int			srcDma; // no need
+	unsigned int			dstDma; // no need
+	unsigned int			dmaLen; // no need
+	unsigned int			flags; // indicate last via hashFinal bit?
+	unsigned int			*req; // can be stored in UserID field
+	unsigned int			result; // no need
+};
+
+struct mtk_desc_buf {
+	DEFINE_DMA_UNMAP_ADDR(src_addr);
+	DEFINE_DMA_UNMAP_ADDR(dst_addr);
+	u16 src_len;
+	u16 dst_len;
 };
 
 struct mtk_desc_ring {
@@ -89,6 +97,7 @@ struct mtk_ring {
 
 	/* descriptor scatter/gather record */
 	struct mtk_dma_rec			*cdr_dma;
+	struct mtk_desc_buf			*dma_buf;
 
 	/* queue */
 	struct crypto_queue			queue;
@@ -134,5 +143,6 @@ struct mtk_alg_template {
 	} alg;
 };
 
+void mtk_push_request(struct mtk_device *mtk);
 
 #endif /* _CORE_H_ */

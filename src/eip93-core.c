@@ -42,16 +42,19 @@ extern struct mtk_alg_template mtk_alg_hmac_sha256;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des;
 extern struct mtk_alg_template mtk_alg_prng;
 
 static struct mtk_alg_template *mtk_algs[] = {
-	&mtk_alg_ecb_des,
-	&mtk_alg_cbc_des,
-	&mtk_alg_ecb_des3_ede,
-	&mtk_alg_cbc_des3_ede,
-	&mtk_alg_ecb_aes,
-	&mtk_alg_cbc_aes,
-	&mtk_alg_ctr_aes,
+//	&mtk_alg_ecb_des,
+//	&mtk_alg_cbc_des,
+//	&mtk_alg_ecb_des3_ede,
+//	&mtk_alg_cbc_des3_ede,
+//	&mtk_alg_ecb_aes,
+//	&mtk_alg_cbc_aes,
+//	&mtk_alg_ctr_aes,
 //	&mtk_alg_sha1,
 //	&mtk_alg_sha224,
 //	&mtk_alg_sha256,
@@ -61,6 +64,9 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_cbc_aes,
 	&mtk_alg_authenc_hmac_sha224_cbc_aes,
 	&mtk_alg_authenc_hmac_sha256_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha1_cbc_des,
+//	&mtk_alg_authenc_hmac_sha224_cbc_des,
+//	&mtk_alg_authenc_hmac_sha256_cbc_des,
 //	&mtk_alg_prng,
 };
 
@@ -117,7 +123,7 @@ static void mtk_unregister_algs(struct mtk_device *mtk)
 	}
 }
 
-static void mtk_push_request(struct mtk_device *mtk)
+void mtk_push_request(struct mtk_device *mtk)
 {
 	int DescriptorCountDone = MTK_RING_SIZE;
 	int DescriptorPendingCount = 0;
@@ -143,8 +149,9 @@ static void mtk_dequeue(struct mtk_device *mtk)
 
 	req = mtk->ring[0].req;
 	backlog = mtk->ring[0].backlog;
-	if (req)
+	if (req) {
 		goto handle_req;
+	}
 
 	while (true) {
 		spin_lock_bh(&mtk->ring[0].queue_lock);
@@ -522,6 +529,13 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 							sizeof(struct mtk_dma_rec), GFP_KERNEL);
 
 	if (!mtk->ring[0].cdr_dma) {
+		dev_err(mtk->dev, "cant allocate CDR_DMA memory\n");
+	}
+
+	mtk->ring[0].dma_buf = devm_kzalloc(mtk->dev, MTK_RING_SIZE *
+							sizeof(struct mtk_desc_buf), GFP_KERNEL);
+
+	if (!mtk->ring[0].dma_buf) {
 		dev_err(mtk->dev, "cant allocate CDR_DMA memory\n");
 	}
 
