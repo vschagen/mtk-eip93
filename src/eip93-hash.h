@@ -21,23 +21,22 @@ struct mtk_ahash_ctx {
 	struct mtk_context base;
 	struct mtk_device *mtk;
 
-	struct crypto_shash *shash; // TODO change to ahash
-
+	struct crypto_shash *shash; /* TODO change to ahash */
 	u32 ipad[SHA512_DIGEST_SIZE / sizeof(u32)];
 	u32 opad[SHA512_DIGEST_SIZE / sizeof(u32)];
 };
 
 struct mtk_ahash_req {
-	bool last_req;
-	bool finish;
-	bool hmac;
-	bool needs_inv;
-	int	flags;
+	bool		last_req;
+	bool		finish;
+	bool		hmac;
+	bool		needs_inv;
+	int		flags;
 
-	int nents;
+	int		nents;
 	dma_addr_t	result_dma;
 
-	u32 digest;
+	u32		digest;
 
 	u8 state_sz;    /* expected sate size, only set once */
 	u32 state[SHA256_DIGEST_SIZE / sizeof(u32)];

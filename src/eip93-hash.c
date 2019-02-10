@@ -43,7 +43,7 @@ static int mtk_ahash_handle_result(struct mtk_device *mtk,
 	rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr);
 	if (IS_ERR(rdesc)) {
 		dev_err(mtk->dev,
-			"hash: result: could not retrieve the result descriptor\n");
+			"hash: result: could not retrieve result descriptor\n");
 		*ret = PTR_ERR(rdesc);
 	} else if (rdesc->peCrtlStat.bits.errStatus) {
 		dev_err(mtk->dev,
@@ -363,39 +363,64 @@ static int mtk_ahash_import(struct ahash_request *areq, const void *in)
 	return 0;
 }
 
-/* EIP93 can only authenticate with the Hash of the key */
 static int mtk_hmac_setkey(struct crypto_ahash *tfm, const u8 *key,
 			  u32 keylen)
 {
-	struct mtk_ahash_ctx *tctx = crypto_ahash_ctx(tfm);
-	size_t bs = crypto_shash_blocksize(ctx->shash);
-	size_t ds = crypto_shash_digestsize(ctx->shash);
-	int err, i;
+	struct mtk_ahash_ctx *ctx = crypto_ahash_ctx(tfm);
+	int bs = crypto_shash_blocksize(ctx->shash);
+	int ds = crypto_shash_digestsize(ctx->shash);
+	int ss = crypto_shash_statesize(ctx->shash);
+	char *ipad = crypto_shash_ctx_aligned(ctx->shash);
+	char *opad = ipad + ss;
+	struct crypto_shash *hash = ctx->shash;
+	SHASH_DESC_ON_STACK(shash, hash);
+	unsigned int i, err;
 
-	SHASH_DESC_ON_STACK(shash, ctx->shash);
+	/*
+	 * EIP93 can only authenticate with hash of the key
+	 * do software shash until EIP93 hash function complete.
+	 */
 
-	shash->tfm = ctx->shash;
-	shash->flags = crypto_shash_get_flags(ctx->shash) &
-		       CRYPTO_TFM_REQ_MAY_SLEEP;
+	shash->tfm = hash;
+	shash->flags = crypto_shash_get_flags(ctx->shash)
+		& CRYPTO_TFM_REQ_MAY_SLEEP;
 
-	if (keylen > bs) {
-		err = crypto_shash_digest(shash, key, keylen, bctx->ipad);
+	if (keys.authkeylen > bs) {
+		int err;
+
+		err = crypto_shash_digest(shash, keys.authkey,
+					keys.authkeylen, ipad);
+
 		if (err)
 			return err;
-		keylen = ds;
-	} else {
-		memcpy(ctx->ipad, key, keylen);
-	}
 
-	memset(ctx->ipad + keylen, 0, bs - keylen);
-	memcpy(ctx->opad, ctx->ipad, bs);
+		keys.authkeylen = ds;
+	} else
+		memcpy(ipad, keys.authkey, keys.authkeylen);
+
+	memset(ipad + keys.authkeylen, 0, bs - keys.authkeylen);
+	memcpy(opad, ipad, bs);
 
 	for (i = 0; i < bs; i++) {
-		ctx->ipad[i] ^= HMAC_IPAD_VALUE;
-		ctx->opad[i] ^= HMAC_OPAD_VALUE;
+		ipad[i] ^= HMAC_IPAD_VALUE;
+		opad[i] ^= HMAC_OPAD_VALUE;
 	}
 
+	err = crypto_shash_init(shash) ?:
+	       crypto_shash_update(shash, ipad, bs) ?:
+	       crypto_shash_export(shash, ipad) ?:
+	       crypto_shash_init(shash) ?:
+	       crypto_shash_update(shash, opad, bs) ?:
+	       crypto_shash_export(shash, opad);
+
+	memcpy(ctx->ipad, ipad, SHA256_DIGEST_SIZE);
+	memcpy(ctx->opad, opad, SHA256_DIGEST_SIZE);
+
 	return 0;
+
+badkey:
+	crypto_aead_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
+	return -EINVAL;
 }
 
 static int mtk_ahash_cra_init(struct crypto_tfm *tfm)
@@ -409,11 +434,12 @@ static int mtk_ahash_cra_init(struct crypto_tfm *tfm)
 	char *alg_base;
 
 	ctx->mtk = mtk;
-	ctx->base.send = mtk_ahash_send;
-	ctx->base.handle_result = mtk_ahash_handle_result;
 
 	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
 				 sizeof(struct mtk_ahash_req));
+
+	ctx->base.send = mtk_ahash_send;
+	ctx->base.handle_result = mtk_ahash_handle_result;
 
 	if IS_HMAC(flags) {
 		if IS_HASH_SHA1(flags)

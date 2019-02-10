@@ -378,7 +378,34 @@ void mtk_initialize(struct mtk_device *mtk)
 	writel(0xffffffff, mtk->base + EIP93_REG_MASK_DISABLE);
 }
 
-/* Allocate Descriptor rings */
+static void mtk_desc_free(struct mtk_device *mtk,
+				struct mtk_desc_ring *cdr,
+				struct mtk_desc_ring *rdr)
+{
+	size_t size;
+
+	writel(0, mtk->base + EIP93_REG_PE_CDR_BASE);
+	writel(0, mtk->base + EIP93_REG_PE_RDR_BASE);
+
+	size = MTK_RING_SIZE * sizeof(struct saRecord_s);
+
+	if (mtk->saRecord) {
+		dma_free_coherent(mtk->dev, size, mtk->saRecord,
+				mtk->saRecord_base);
+		mtk->saRecord = NULL;
+		mtk->saRecord_base = 0;
+	}
+
+	size = MTK_RING_SIZE * sizeof(struct saState_s);
+
+	if (mtk->saState) {
+		dma_free_coherent(mtk->dev, size, mtk->saState,
+				mtk->saState_base);
+		mtk->saState = NULL;
+		mtk->saState_base = 0;
+	}
+}
+
 static int mtk_desc_init(struct mtk_device *mtk,
 			struct mtk_desc_ring *cdr,
 			struct mtk_desc_ring *rdr)
@@ -427,14 +454,18 @@ static int mtk_desc_init(struct mtk_device *mtk,
 	mtk->saRecord = dma_zalloc_coherent(mtk->dev, size,
 				&mtk->saRecord_base, GFP_KERNEL);
 
+	if (mtk->saRecord == NULL) {
+		dev_err(mtk->dev, "dma_alloc for saState_prepare failed!!\n");
+		goto err_cleanup;
+	}
+
 	size = (MTK_RING_SIZE * sizeof(struct saState_s));
 
 	mtk->saState = dma_zalloc_coherent(mtk->dev, size,
 				&mtk->saState_base, GFP_KERNEL);
 
-	if (saState == NULL) {
+	if (mtk->saState == NULL) {
 		dev_err(mtk->dev, "dma_alloc for saState_prepare failed!!\n");
-		errVal = -ENOMEM;
 		goto free_saRecord;
 	}
 
@@ -443,35 +474,6 @@ free_saRecord:
 	mtk_desc_free(mtk, cdr, rdr);
 err_cleanup:
 	return -ENOMEM;
-}
-
-/* Free Descriptor Rings */
-static void mtk_desc_free(struct mtk_device *mtk,
-				struct mtk_desc_ring *cdr,
-				struct mtk_desc_ring *rdr)
-{
-	size_t size;
-
-	writel(0, mtk->base + EIP93_REG_PE_CDR_BASE);
-	writel(0, mtk->base + EIP93_REG_PE_RDR_BASE);
-
-	size = MTK_RING_SIZE * sizeof(struct saRecord_s);
-
-	if (mtk->saRecord) {
-		dma_free_coherent(mtk->dev, size, mtk->saRecord,
-				mtk->saRecord_base);
-		mtk->saRecord = NULL;
-		mtk->saRecord_base = 0;
-	}
-
-	size = MTK_RING_SIZE * sizeof(struct saState_s);
-
-	if (mtk->saState) {
-		dma_free_coherent(mtk->dev, size, mtk->saState,
-				mtk->saState_base);
-		mtk->saState = NULL;
-		mtk->saState_base = 0;
-	}
 }
 
 static int mtk_crypto_probe(struct platform_device *pdev)

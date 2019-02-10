@@ -71,7 +71,7 @@ static int mtk_make_sg_cpy(struct scatterlist *src, struct scatterlist **dst,
 	sg_init_table(*dst, 1);
 	sg_set_buf(*dst, pages, totallen);
 	/* copy only as requested */
-	sg_copy_to_buffer(src, sg_nents_for_len(src, len), pages, cryptlen);
+	sg_copy_to_buffer(src, sg_nents_for_len(src, len), pages, len);
 
 	return 0;
 }
