@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0
-/*
+/* SPDX-License-Identifier: GPL-2.0
+ *
  * Copyright (C) 2019
  *
  * Richard van Schagen <vschagen@cs.com>
@@ -139,11 +139,11 @@ typedef union
 		unsigned int reserved4			: 4;
 		unsigned int cipherMode			: 2;
 		unsigned int reserved3			: 1;
-		unsigned int sslMac			: 1;
-		unsigned int hmac			: 1;
+		unsigned int sslMac				: 1;
+		unsigned int hmac				: 1;
 		unsigned int byteOffset			: 1;
 		unsigned int reserved2			: 2;
-		unsigned int hashCryptOffset		: 8;
+		unsigned int hashCryptOffset	: 8;
 		unsigned int aesKeyLen			: 3;
 		unsigned int reserved1			: 1;
 		unsigned int aesDecKey			: 1;

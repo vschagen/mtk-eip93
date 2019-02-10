@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=mtk-eip93
-PKG_RELEASE:=0.7
+PKG_RELEASE:=0.8
 
 include $(INCLUDE_DIR)/package.mk
 

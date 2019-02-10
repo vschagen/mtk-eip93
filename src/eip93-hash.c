@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0
-/*
+/* SPDX-License-Identifier: GPL-2.0
+ *
  * Copyright (C) 2019
  *
  * Richard van Schagen <vschagen@cs.com>
@@ -310,7 +310,6 @@ static int mtk_ahash_final(struct ahash_request *areq)
 		else if (IS_SHA256(req->flags))
 			memcpy(areq->result, sha256_zero_message_hash,
 			       SHA256_DIGEST_SIZE);
-
 		return 0;
 	}
 

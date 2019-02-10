@@ -124,6 +124,7 @@ struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk,
 	cdesc->saAddr = saRecord_base;
 	cdesc->stateAddr = saState_base;
 	cdesc->arc4Addr = saState_base;
+	cdesc->userId = 0;
 	cdesc->peLength.bits.byPass = 0; //assoclen;
 	cdesc->peLength.bits.length = dmaLen;
 	cdesc->peLength.bits.hostReady = 1;
