@@ -50,20 +50,20 @@ extern struct mtk_alg_template mtk_alg_prng;
 static struct mtk_alg_template *mtk_algs[] = {
 //	&mtk_alg_ecb_des,
 //	&mtk_alg_cbc_des,
-//	&mtk_alg_ecb_des3_ede,
-//	&mtk_alg_cbc_des3_ede,
-//	&mtk_alg_ecb_aes,
-//	&mtk_alg_cbc_aes,
-//	&mtk_alg_ctr_aes,
+	&mtk_alg_ecb_des3_ede,
+	&mtk_alg_cbc_des3_ede,
+	&mtk_alg_ecb_aes,
+	&mtk_alg_cbc_aes,
+	&mtk_alg_ctr_aes,
 //	&mtk_alg_sha1,
 //	&mtk_alg_sha224,
 //	&mtk_alg_sha256,
 //	&mtk_alg_hmac_sha1,
 //	&mtk_alg_hmac_sha224,
 //	&mtk_alg_hmac_sha256,
-	&mtk_alg_authenc_hmac_sha1_cbc_aes,
-	&mtk_alg_authenc_hmac_sha224_cbc_aes,
-	&mtk_alg_authenc_hmac_sha256_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha1_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_authenc_hmac_sha1_cbc_des,
 //	&mtk_alg_authenc_hmac_sha224_cbc_des,
 //	&mtk_alg_authenc_hmac_sha256_cbc_des,
@@ -215,7 +215,9 @@ static void mtk_dequeue_work(struct work_struct *work)
 inline struct crypto_async_request *mtk_rdr_req_get(struct mtk_device *mtk)
 {
 	int i = mtk_ring_curr_rptr_index(mtk);
-	struct mtk_desc_buf *buf = &mtk->ring[0].dma_buf[i];
+	struct mtk_desc_buf *buf;
+
+	buf = &mtk->ring[0].dma_buf[i];
 
 	return (struct crypto_async_request *)buf->req;
 }
