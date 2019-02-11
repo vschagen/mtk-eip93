@@ -14,8 +14,9 @@ struct mtk_cipher_ctx {
 	u8			key[AES_MAX_KEY_SIZE];
 	u32			keylen;
 	struct crypto_skcipher	*fallback;
-	bool			aead;
 	/* AEAD specific */
+	bool			aead;
+	unsigned int		authsize;
 	struct crypto_shash	*shash; /* TODO change to ahash */
 	u8			ipad[SHA512_DIGEST_SIZE] __aligned(sizeof(u32));
 	u8			opad[SHA512_DIGEST_SIZE] __aligned(sizeof(u32));
