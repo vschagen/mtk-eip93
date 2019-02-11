@@ -27,21 +27,21 @@
 #define MTK_MAX_CIPHER_KEY_SIZE		AES_KEYSIZE_256
 
 /* IV length in bytes */
-#define MTK_AES_IV_LENGTH			AES_BLOCK_SIZE
+#define MTK_AES_IV_LENGTH		AES_BLOCK_SIZE
 /* max of AES_BLOCK_SIZE, DES3_EDE_BLOCK_SIZE */
-#define MTK_MAX_IV_SIZE				AES_BLOCK_SIZE
+#define MTK_MAX_IV_SIZE			AES_BLOCK_SIZE
 
 /* maximum nonce bytes  */
-#define MTK_MAX_NONCE				16
-#define MTK_MAX_NONCE_WORDS			(MTK_MAX_NONCE / sizeof(u32))
+#define MTK_MAX_NONCE			16
+#define MTK_MAX_NONCE_WORDS		(MTK_MAX_NONCE / sizeof(u32))
 
 /* burst size alignment requirement */
-#define MTK_MAX_ALIGN_SIZE			64
+#define MTK_MAX_ALIGN_SIZE		64
 
 /* cipher algorithms */
-#define MTK_ALG_DES				BIT(0)
+#define MTK_ALG_DES			BIT(0)
 #define MTK_ALG_3DES			BIT(1)
-#define MTK_ALG_AES				BIT(2)
+#define MTK_ALG_AES			BIT(2)
 
 /* hash and hmac algorithms */
 #define MTK_HASH_MD5			BIT(3)
@@ -57,8 +57,8 @@
 #define MTK_MODE_MASK			GENMASK(10, 12)
 
 /* cipher encryption/decryption operations */
-#define MTK_ENCRYPT				BIT(13)
-#define MTK_DECRYPT				BIT(14)
+#define MTK_ENCRYPT			BIT(13)
+#define MTK_DECRYPT			BIT(14)
 
 #define IS_DES(flags)			(flags & MTK_ALG_DES)
 #define IS_3DES(flags)			(flags & MTK_ALG_3DES)
@@ -66,8 +66,8 @@
 
 #define IS_HASH_MD5(flags)		(flags & MTK_HASH_MD5)
 #define IS_HASH_SHA1(flags)		(flags & MTK_HASH_SHA1)
-#define IS_HASH_SHA224(flags)	(flags & MTK_HASH_SHA224)
-#define IS_HASH_SHA256(flags)	(flags & MTK_HASH_SHA256) 
+#define IS_HASH_SHA224(flags)		(flags & MTK_HASH_SHA224)
+#define IS_HASH_SHA256(flags)		(flags & MTK_HASH_SHA256) 
 #define IS_HMAC(flags)			(flags & MTK_HASH_HMAC)
 
 #define IS_CBC(mode)			(mode & MTK_MODE_CBC)
@@ -77,8 +77,10 @@
 #define IS_ENCRYPT(dir)			(dir & MTK_ENCRYPT)
 #define IS_DECRYPT(dir)			(dir & MTK_DECRYPT)
 
-#define IS_HASH(flags)			(flags & (MTK_HASH_MD5 || MTK_HASH_SHA1 || \
-									MTK_HASH_SHA224 || MTK_HASH_SHA256))
+#define IS_HASH(flags)			(flags & (MTK_HASH_MD5 || \
+						MTK_HASH_SHA1 || \
+						MTK_HASH_SHA224 || \
+						 MTK_HASH_SHA256))
 
 #define HASH_DIGEST_OUT			0
 #define HASH_DIGEST_IN			1
@@ -132,23 +134,23 @@ typedef union
 {
 	struct
 	{
-		unsigned int copyDigest			: 1;
-		unsigned int copyHeader			: 1;
-		unsigned int copyPayload		: 1;
-		unsigned int copyPad			: 1;
-		unsigned int reserved4			: 4;
-		unsigned int cipherMode			: 2;
-		unsigned int reserved3			: 1;
-		unsigned int sslMac				: 1;
-		unsigned int hmac				: 1;
-		unsigned int byteOffset			: 1;
-		unsigned int reserved2			: 2;
+		unsigned int copyDigest		: 1;
+		unsigned int copyHeader		: 1;
+		unsigned int copyPayload	: 1;
+		unsigned int copyPad		: 1;
+		unsigned int reserved4		: 4;
+		unsigned int cipherMode		: 2;
+		unsigned int reserved3		: 1;
+		unsigned int sslMac		: 1;
+		unsigned int hmac		: 1;
+		unsigned int byteOffset		: 1;
+		unsigned int reserved2		: 2;
 		unsigned int hashCryptOffset	: 8;
-		unsigned int aesKeyLen			: 3;
-		unsigned int reserved1			: 1;
-		unsigned int aesDecKey			: 1;
-		unsigned int seqNumCheck		: 1;
-		unsigned int reserved0			: 2;
+		unsigned int aesKeyLen		: 3;
+		unsigned int reserved1		: 1;
+		unsigned int aesDecKey		: 1;
+		unsigned int seqNumCheck	: 1;
+		unsigned int reserved0		: 2;
 	} bits;
 	unsigned int word;
 
@@ -207,13 +209,13 @@ typedef union
 
 typedef struct eip93_descriptor_s
 {
-	peCrtlStat_t	peCrtlStat;
-	unsigned int	srcAddr;
-	unsigned int	dstAddr;
-	unsigned int	saAddr;
-	unsigned int	stateAddr;
-	unsigned int	arc4Addr;
-	unsigned int	userId;
+	peCrtlStat_t		peCrtlStat;
+	unsigned int		srcAddr;
+	unsigned int		dstAddr;
+	unsigned int		saAddr;
+	unsigned int		stateAddr;
+	unsigned int		arc4Addr;
+	unsigned int		userId;
 	peLength_t		peLength;
 } eip93_descriptor_t;
 

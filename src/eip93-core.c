@@ -45,6 +45,9 @@ extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des3_ede;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des3_ede;
+extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des3_ede;
 extern struct mtk_alg_template mtk_alg_prng;
 
 static struct mtk_alg_template *mtk_algs[] = {
@@ -61,12 +64,15 @@ static struct mtk_alg_template *mtk_algs[] = {
 //	&mtk_alg_hmac_sha1,
 //	&mtk_alg_hmac_sha224,
 //	&mtk_alg_hmac_sha256,
-//	&mtk_alg_authenc_hmac_sha1_cbc_aes,
-//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
-//	&mtk_alg_authenc_hmac_sha256_cbc_aes,
+	&mtk_alg_authenc_hmac_sha1_cbc_aes,
+	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+	&mtk_alg_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_authenc_hmac_sha1_cbc_des,
 //	&mtk_alg_authenc_hmac_sha224_cbc_des,
 //	&mtk_alg_authenc_hmac_sha256_cbc_des,
+//	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
 //	&mtk_alg_prng,
 };
 
