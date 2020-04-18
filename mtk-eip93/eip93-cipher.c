@@ -801,7 +801,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	mtk_ctx_saRecord(ctx, key, nonce, keylen, flags);
 
 	if (ctx->fallback) {
-		ret = crypto_sync_skcipher_setkey(ctx->fallback, key, keylen);
+		ret = crypto_sync_skcipher_setkey(ctx->fallback, key, len);
 		if (ret)
 			return ret;
 	}
