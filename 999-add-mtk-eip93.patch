@@ -1,0 +1,21 @@
+--- a/drivers/staging/Kconfig
++++ b/drivers/staging/Kconfig
+@@ -108,6 +108,8 @@ source "drivers/staging/ralink-gdma/Kcon
+ 
+ source "drivers/staging/mt7621-dts/Kconfig"
+ 
++source "drivers/staging/mtk-eip93/Kconfig"
++
+ source "drivers/staging/gasket/Kconfig"
+ 
+ source "drivers/staging/axis-fifo/Kconfig"
+--- a/drivers/staging/Makefile
++++ b/drivers/staging/Makefile
+@@ -42,6 +42,7 @@ obj-$(CONFIG_PCI_MT7621)	+= mt7621-pci/
+ obj-$(CONFIG_PCI_MT7621_PHY)	+= mt7621-pci-phy/
+ obj-$(CONFIG_PINCTRL_RT2880)	+= mt7621-pinctrl/
+ obj-$(CONFIG_SOC_MT7621)	+= mt7621-dma/
++obj-$(CONFIG_MTK_EIP93)	+= mtk-eip93/
+ obj-$(CONFIG_DMA_RALINK)	+= ralink-gdma/
+ obj-$(CONFIG_SOC_MT7621)	+= mt7621-dts/
+ obj-$(CONFIG_STAGING_GASKET_FRAMEWORK)	+= gasket/
