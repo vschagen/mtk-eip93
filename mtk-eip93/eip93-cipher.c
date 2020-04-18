@@ -455,7 +455,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	if (ctx->aead) {
 		saRecord->saCmd0.bits.opCode = 1;
 	}
-
+/*
 	if (IS_GENIV(flags)) {
 		printk("geniv");
 		saRecord->saCmd0.bits.opCode = 0;
@@ -466,7 +466,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		else
 			saRecord->saCmd0.bits.ivSource = 1;
 	}
-
+*/
 	if (IS_HMAC(flags)) {
 		saRecord->saCmd1.bits.hashCryptOffset = (aad / 4);
 		saRecord->saCmd0.bits.digestLength = (authsize / 4);
@@ -526,6 +526,7 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	struct eip93_descriptor_s *cdesc;
 	struct eip93_descriptor_s *rdesc;
 	struct mtk_desc_buf *buf;
+	struct crypto_async_request *req = NULL;
 	struct saState_s *saState;
 	u32 saPointer;
 	int ndesc = 0, rptr = 0, nreq;
@@ -681,6 +682,13 @@ get_sa:
 		saPointer = buf->saPointer;
 		saState = &mtk->saState[saPointer];
 		memcpy(reqiv, saState->stateIv, rctx->ivsize);
+	}
+
+	if IS_BUSY(rctx->flags) {
+		req = (struct crypto_async_request *)buf->req;
+		local_bh_disable();
+		req->complete(req, -EINPROGRESS);
+		local_bh_enable();
 	}
 
 	return ndesc;
@@ -864,11 +872,18 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 			mtk->base + EIP93_REG_PE_RING_THRESH);
 		mtk->ring[0].busy = true;
 	}
+
+	if (mtk->ring[0].requests > MTK_RING_BUSY) {
+		ret = -EBUSY;
+		rctx->flags |= MTK_BUSY;
+	} else
+		ret = -EINPROGRESS;
+
 	spin_unlock_bh(&mtk->ring[0].lock);
 	/* Writing new descriptor count starts DMA action */
 	writel(commands, mtk->base + EIP93_REG_PE_CD_COUNT);
 
-	return -EINPROGRESS;
+	return ret;
 }
 
 static int mtk_skcipher_encrypt(struct skcipher_request *req)
@@ -936,8 +951,6 @@ static int mtk_aead_cra_init(struct crypto_tfm *tfm)
 				alg_base);
 		return PTR_ERR(ctx->shash);
 	}
-
-	printk("cra-init");
 
 	return 0;
 }
@@ -1026,8 +1039,6 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	memcpy(&ctx->sa->saIDigest, ipad,SHA256_DIGEST_SIZE);
 	memcpy(&ctx->sa->saODigest, opad, SHA256_DIGEST_SIZE);
 
-	printk("aead set key");
-
 	return 0;
 
 badkey:
@@ -1063,8 +1074,6 @@ static int mtk_aead_crypt(struct aead_request *req)
 	int DescriptorPendingCount = 0;
 	int commands = 0, results = 0;
 
-	printk("aead-crypt");
-
 	rctx->textsize = req->cryptlen;
 	rctx->assoclen = req->assoclen;
 	rctx->authsize = authsize;
@@ -1098,12 +1107,18 @@ static int mtk_aead_crypt(struct aead_request *req)
 			mtk->base + EIP93_REG_PE_RING_THRESH);
 		mtk->ring[0].busy = true;
 	}
+	if (mtk->ring[0].requests > MTK_RING_BUSY) {
+		ret = -EBUSY;
+		rctx->flags |= MTK_BUSY;
+	} else
+		ret = -EINPROGRESS;
+
 	spin_unlock_bh(&mtk->ring[0].lock);
 
 	/* Writing new descriptor count starts DMA action */
 	writel(commands, mtk->base + EIP93_REG_PE_CD_COUNT);
 
-	return -EINPROGRESS;
+	return ret;
 }
 
 static int mtk_aead_encrypt(struct aead_request *req)

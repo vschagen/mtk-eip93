@@ -39,17 +39,18 @@
 #define MTK_HASH_HMAC			BIT(7)
 #define MTK_HASH_MASK			GENMASK(6, 3)
 /* cipher modes */
-#define MTK_MODE_CBC			BIT(10)
-#define MTK_MODE_ECB			BIT(11)
-#define MTK_MODE_CTR			BIT(12)
-#define MTK_MODE_RFC3686		BIT(13)
-#define MTK_MODE_MASK			GENMASK(12, 10)
+#define MTK_MODE_CBC			BIT(8)
+#define MTK_MODE_ECB			BIT(9)
+#define MTK_MODE_CTR			BIT(10)
+#define MTK_MODE_RFC3686		BIT(11)
+#define MTK_MODE_MASK			GENMASK(10, 8)
 
 /* cipher encryption/decryption operations */
-#define MTK_ENCRYPT			BIT(14)
-#define MTK_DECRYPT			BIT(15)
+#define MTK_ENCRYPT			BIT(12)
+#define MTK_DECRYPT			BIT(13)
 
-#define MTK_GENIV			BIT(16)
+#define MTK_GENIV			BIT(14)
+#define MTK_BUSY			BIT(15)
 
 #define IS_DES(flags)			(flags & MTK_ALG_DES)
 #define IS_3DES(flags)			(flags & MTK_ALG_3DES)
@@ -66,6 +67,8 @@
 #define IS_CTR(mode)			(mode & MTK_MODE_CTR)
 #define IS_RFC3686(mode)		(mode & MTK_MODE_RFC3686)
 #define IS_GENIV(flags)			(flags & MTK_GENIV)
+
+#define IS_BUSY(flags)			(flags & MTK_BUSY)
 
 #define IS_ENCRYPT(dir)			(dir & MTK_ENCRYPT)
 #define IS_DECRYPT(dir)			(dir & MTK_DECRYPT)
@@ -85,6 +88,7 @@
 #define CRYPTO_DECRYPTION		2
 
 #define MTK_RING_SIZE			256
+#define MTK_RING_BUSY			224
 #define NUM_AES_BYPASS			0
 #define MTK_QUEUE_LENGTH		128
 #define MTK_DESC_ASYNC			BIT(0)
