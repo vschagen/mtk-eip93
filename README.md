@@ -3,6 +3,8 @@
 Initial attemps for the EIP-93 Crypto Engine Driver. This Crypto Engine is 
 available in the Mediatek MT7621 SoC.
 
+THIS WAS AN INTITAL ATTEMPT. ITS OLD AND BUGGY. DONT USE!!
+
 It enables hardware crypto for:
 * DES-ECB/CBC
 * 3DES-ECB/CBC
