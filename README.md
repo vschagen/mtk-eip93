@@ -1,12 +1,7 @@
 # Mediatek EIP93 Crypto Engine
 
-Initial attemps for the EIP-93 Crypto Engine Driver. This Crypto Engine is 
+Linux Crypto Driver for the EIP-93. This Crypto engine is
 available in the Mediatek MT7621 SoC.
-
-It enables hardware crypto for:
-* DES-ECB/CBC
-* 3DES-ECB/CBC
-* AES-ECB/CBC/CTR with 128/192/256 keysize.
 
 This should be added to your device DTS or better yet to the mt7621.dtsi:
 
@@ -20,30 +15,17 @@ This should be added to your device DTS or better yet to the mt7621.dtsi:
 		interrupts = <GIC_SHARED 19 IRQ_TYPE_LEVEL_HIGH>;
 	};
 
-Work in progress at the moment: Still need work / cleanup
+It enables hardware crypto for:
+* DES-ECB/CBC
+* 3DES-ECB/CBC
+* AES-ECB/CBC/CTR with 128/192/256 keysize.
 
-Rebased code on EIP-197 Safexcel code.
-
-Removed depreciated ABLKCIPHER API and use SKCIPHER now.
-
-Need cleanup but seems "in-basic" to work:
 
 Authentication:
 
+AEAD(HMAC(MD5/SHA1/224/256, DES/3DES-CBC)
 AEAD(HMAC(SHA1/224/256),CBC(AES))
 
-
-BUG:crypto-blocks > PAGE_SIZE fail !!
-	work around (while continue developing hash portion):
-	Kernel page_size 16Kb
-
-TODO:
-
-MD5 / SHA1 / SHA 224 / SHA 256
-
-HMAC( MD5 / SHA1 / SHA224 / SSH 256)
-
-Authentication:
-
-AEAD(HMAC(SHA1/224/256),CBC(AES))
+Testing has been done on Linux Kernel v5.4.31 with all the extended tests enabled.
+Sofar ALL tests are passed. However still issues getting this to work with IPSEC.
 

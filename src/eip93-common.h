@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2019
+ * Copyright (C) 2019 - 2020
  *
  * Richard van Schagen <vschagen@cs.com>
  */
@@ -8,19 +8,7 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
-#include <crypto/aes.h>
-#include <crypto/des.h>
-#include <crypto/hash.h>
-#include <crypto/internal/hash.h>
-#include <crypto/internal/skcipher.h>
-#include <crypto/internal/rng.h>
-#include <crypto/rng.h>
-#include <crypto/sha.h>
-#include <crypto/skcipher.h>
-#include <linux/crypto.h>
-#include <linux/types.h>
-
-#include "eip93-core.h"
+#include <linux/bits.h>
 
 /* key size in bytes */
 #define MTK_SHA_HMAC_KEY_SIZE		64
@@ -42,23 +30,26 @@
 #define MTK_ALG_DES			BIT(0)
 #define MTK_ALG_3DES			BIT(1)
 #define MTK_ALG_AES			BIT(2)
-
+#define MTK_ALG_MASK			GENMASK(2, 0)
 /* hash and hmac algorithms */
 #define MTK_HASH_MD5			BIT(3)
 #define MTK_HASH_SHA1			BIT(4)
 #define MTK_HASH_SHA224			BIT(5)
 #define MTK_HASH_SHA256			BIT(6)
 #define MTK_HASH_HMAC			BIT(7)
-
+#define MTK_HASH_MASK			GENMASK(6, 3)
 /* cipher modes */
 #define MTK_MODE_CBC			BIT(10)
 #define MTK_MODE_ECB			BIT(11)
 #define MTK_MODE_CTR			BIT(12)
-#define MTK_MODE_MASK			GENMASK(10, 12)
+#define MTK_MODE_RFC3686		BIT(13)
+#define MTK_MODE_MASK			GENMASK(12, 10)
 
 /* cipher encryption/decryption operations */
-#define MTK_ENCRYPT			BIT(13)
-#define MTK_DECRYPT			BIT(14)
+#define MTK_ENCRYPT			BIT(14)
+#define MTK_DECRYPT			BIT(15)
+
+#define MTK_GENIV			BIT(16)
 
 #define IS_DES(flags)			(flags & MTK_ALG_DES)
 #define IS_3DES(flags)			(flags & MTK_ALG_3DES)
@@ -67,20 +58,26 @@
 #define IS_HASH_MD5(flags)		(flags & MTK_HASH_MD5)
 #define IS_HASH_SHA1(flags)		(flags & MTK_HASH_SHA1)
 #define IS_HASH_SHA224(flags)		(flags & MTK_HASH_SHA224)
-#define IS_HASH_SHA256(flags)		(flags & MTK_HASH_SHA256) 
+#define IS_HASH_SHA256(flags)		(flags & MTK_HASH_SHA256)
 #define IS_HMAC(flags)			(flags & MTK_HASH_HMAC)
 
 #define IS_CBC(mode)			(mode & MTK_MODE_CBC)
 #define IS_ECB(mode)			(mode & MTK_MODE_ECB)
 #define IS_CTR(mode)			(mode & MTK_MODE_CTR)
+#define IS_RFC3686(mode)		(mode & MTK_MODE_RFC3686)
+#define IS_GENIV(flags)			(flags & MTK_GENIV)
 
 #define IS_ENCRYPT(dir)			(dir & MTK_ENCRYPT)
 #define IS_DECRYPT(dir)			(dir & MTK_DECRYPT)
 
-#define IS_HASH(flags)			(flags & (MTK_HASH_MD5 || \
-						MTK_HASH_SHA1 || \
+#define IS_CIPHER(flags)		(flags & (MTK_ALG_DES || \
+						MTK_ALG_3DES ||  \
+						MTK_ALG_AES))
+
+#define IS_HASH(flags)			(flags & (MTK_HASH_MD5 ||  \
+						MTK_HASH_SHA1 ||   \
 						MTK_HASH_SHA224 || \
-						 MTK_HASH_SHA256))
+						MTK_HASH_SHA256))
 
 #define HASH_DIGEST_OUT			0
 #define HASH_DIGEST_IN			1
@@ -88,21 +85,30 @@
 #define CRYPTO_DECRYPTION		2
 
 #define MTK_RING_SIZE			256
-#define NUM_AES_BYPASS			250
+#define NUM_AES_BYPASS			0
 #define MTK_QUEUE_LENGTH		128
+#define MTK_DESC_ASYNC			BIT(0)
+#define MTK_DESC_SKCIPHER		BIT(1)
+#define MTK_DESC_AEAD			BIT(2)
+#define MTK_DESC_AHASH			BIT(3)
+#define MTK_DESC_PRNG			BIT(4)
+#define MTK_DESC_FAKE_HMAC		BIT(5)
+#define MTK_DESC_LAST			BIT(6)
+#define MTK_DESC_FINISH			BIT(7)
+
 /*
  * Interrupts of EIP93
  */
 typedef enum
 {
-    EIP93_INT_PE_CDRTHRESH_REQ =   BIT(0),
-    EIP93_INT_PE_RDRTHRESH_REQ =   BIT(1),
-    EIP93_INT_PE_OPERATION_DONE =  BIT(9),
-    EIP93_INT_PE_INBUFTHRESH_REQ = BIT(10),
-    EIP93_INT_PE_OUTBURTHRSH_REQ = BIT(11),
-    EIP93_INT_PE_ERR_REG =         BIT(13),
-    EIP93_INT_PE_RD_DONE_IRQ =     BIT(16)
-
+    EIP93_INT_PE_CDRTHRESH_REQ =	BIT(0),
+    EIP93_INT_PE_RDRTHRESH_REQ =	BIT(1),
+    EIP93_INT_PE_OPERATION_DONE =	BIT(9),
+    EIP93_INT_PE_INBUFTHRESH_REQ =	BIT(10),
+    EIP93_INT_PE_OUTBURTHRSH_REQ =	BIT(11),
+    EIP93_INT_PE_PRNG_IRQ =		BIT(12),
+    EIP93_INT_PE_ERR_REG =		BIT(13),
+    EIP93_INT_PE_RD_DONE_IRQ =		BIT(16),
 } EIP93_InterruptSource_t;
 
 typedef union
@@ -191,7 +197,7 @@ typedef union
 		unsigned int errStatus		: 8;
 		unsigned int padCrtlStat	: 8;
 	} bits;
-	unsigned int word;	
+	unsigned int word;
 } peCrtlStat_t;
 
 typedef union
@@ -203,8 +209,8 @@ typedef union
 		unsigned int hostReady		: 1;
 		unsigned int peReady		: 1;
 		unsigned int byPass		: 8;
-	} bits;	
-	unsigned int word;		
+	} bits;
+	unsigned int word;
 } peLength_t;
 
 typedef struct eip93_descriptor_s
