@@ -46,9 +46,12 @@ inline int mtk_ring_rdr_index(struct mtk_device *mtk,
 	return ((void *)rdesc - rdr->base) / rdr->offset;
 }
 
-void *mtk_ring_next_wptr(struct mtk_device *mtk, struct mtk_desc_ring *ring)
+inline void *mtk_ring_next_wptr(struct mtk_device *mtk,
+					struct mtk_desc_ring *ring, u32 *idx)
 {
 	void *ptr = ring->write;
+
+	*idx = (ring->write - ring->base) / ring->offset;
 
 	if ((ring->write == ring->read - ring->offset) ||
 		(ring->read == ring->base && ring->write == ring->base_end))
@@ -62,12 +65,15 @@ void *mtk_ring_next_wptr(struct mtk_device *mtk, struct mtk_desc_ring *ring)
 	return ptr;
 }
 
-void *mtk_ring_next_rptr(struct mtk_device *mtk, struct mtk_desc_ring *ring)
+inline void *mtk_ring_next_rptr(struct mtk_device *mtk,
+					struct mtk_desc_ring *ring, u32 *idx)
 {
 	void *ptr = ring->read;
 
 	if (ring->write == ring->read)
 		return ERR_PTR(-ENOENT);
+
+	*idx = (ring->read - ring->base) / ring->offset;
 
 	if (ring->read == ring->base_end)
 		ring->read = ring->base;
@@ -77,8 +83,8 @@ void *mtk_ring_next_rptr(struct mtk_device *mtk, struct mtk_desc_ring *ring)
 	return ptr;
 }
 
-void mtk_ring_rollback_wptr(struct mtk_device *mtk,
-				 struct mtk_desc_ring *ring)
+inline void mtk_ring_rollback_wptr(struct mtk_device *mtk,
+				 	struct mtk_desc_ring *ring)
 {
 	if (ring->write == ring->read)
 		return;
@@ -103,41 +109,28 @@ inline void *mtk_ring_curr_rptr(struct mtk_device *mtk)
 	return rdr->read;
 }
 
-struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk,
-			dma_addr_t srcDma, dma_addr_t dstDma,
-			dma_addr_t saRecord_base, dma_addr_t saState_base,
-			u32 len, int hashFinal, int prngMode)
+inline struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk,
+								u32 *idx)
 {
 	struct eip93_descriptor_s *cdesc;
 
-	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].cdr);
+	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].cdr, idx);
+
 	if (IS_ERR(cdesc))
 		return cdesc;
 
 	memset(cdesc, 0, sizeof(struct eip93_descriptor_s));
-	cdesc->peCrtlStat.bits.hostReady = 1;
-	cdesc->peCrtlStat.bits.prngMode = prngMode;
-	cdesc->peCrtlStat.bits.hashFinal = hashFinal;
-	cdesc->peCrtlStat.bits.padCrtlStat = 0;
-	cdesc->peCrtlStat.bits.peReady = 0;
-	cdesc->srcAddr = srcDma;
-	cdesc->dstAddr = dstDma;
-	cdesc->saAddr = saRecord_base;
-	cdesc->stateAddr = saState_base;
-	cdesc->arc4Addr = saState_base;
-	cdesc->userId = 0;
-	cdesc->peLength.bits.byPass = 0;
-	cdesc->peLength.bits.length = (len & GENMASK(20,0));
-	cdesc->peLength.bits.hostReady = 1;
 
 	return cdesc;
 }
 
-struct eip93_descriptor_s *mtk_add_rdesc(struct mtk_device *mtk)
+inline struct eip93_descriptor_s *mtk_add_rdesc(struct mtk_device *mtk,
+								u32 *idx)
 {
 	struct eip93_descriptor_s *rdesc;
 
-	rdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].rdr);
+	rdesc = mtk_ring_next_wptr(mtk, &mtk->ring[0].rdr, idx);
+
 	if (IS_ERR(rdesc))
 		return rdesc;
 

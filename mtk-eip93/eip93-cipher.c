@@ -260,15 +260,28 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 				nextout = true;
 		}
 
-		cdesc = mtk_add_cdesc(mtk, saddr + offsetin, daddr + offsetout,
-				saRecord_base, saState_base, len, 1, 0);
-		if (IS_ERR(cdesc))
-			dev_err(mtk->dev, "No CDR mem");
-		rdesc = mtk_add_rdesc(mtk);
+		rdesc = mtk_add_rdesc(mtk, &wptr);
 		if (IS_ERR(rdesc))
 			dev_err(mtk->dev, "No RDR mem");
 
-		wptr = mtk_ring_cdr_index(mtk, cdesc);
+		cdesc = mtk_add_cdesc(mtk, &wptr);
+		if (IS_ERR(cdesc))
+			dev_err(mtk->dev, "No CDR mem");
+
+		cdesc->peCrtlStat.bits.hostReady = 1;
+		cdesc->peCrtlStat.bits.prngMode = 0;
+		cdesc->peCrtlStat.bits.hashFinal = 1;
+		cdesc->peCrtlStat.bits.padCrtlStat = 0;
+		cdesc->peCrtlStat.bits.peReady = 0;
+		cdesc->srcAddr = saddr + offsetin;
+		cdesc->dstAddr = daddr + offsetout;
+		cdesc->saAddr = saRecord_base;
+		cdesc->stateAddr = saState_base;
+		cdesc->arc4Addr = saState_base;
+		cdesc->userId = 0;
+		cdesc->peLength.bits.byPass = 0;
+		cdesc->peLength.bits.length = len;
+		cdesc->peLength.bits.hostReady = 1;
 		buf = &mtk->ring[0].dma_buf[wptr];
 		buf->flags = MTK_DESC_ASYNC;
 		buf->req = areq;
@@ -321,8 +334,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	bool complete = true;
 	bool src_align = true, dst_align = true;
 	u32 iv[AES_BLOCK_SIZE / sizeof(u32)];
-	int blksize = 1, i;
-	u32 itag[8];
+	int blksize = 1;
 
 	switch ((flags & MTK_ALG_MASK))
 	{
@@ -536,19 +548,16 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	u32 aad = rctx->assoclen;
 	u32 len = aad + rctx->textsize;
 	u32 authsize = rctx->authsize;
-	u32 itag[8];
-	u32 otag[8];
+	u32 auth = 0;
+	u32 *otag;
 
 	*ret = 0;
 	*should_complete = false;
 
-//	if (IS_GENIV(rctx->flags) && IS_DECRYPT(rctx->flags))
-//		len -= rctx->ivsize;
-
 	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
 	while (ndesc < nreq) {
-		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr);
+		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr, &rptr);
 		if (IS_ERR(rdesc)) {
 			dev_err(mtk->dev, "Ndesc: %d nreq: %d\n", ndesc, nreq);
 			*ret = PTR_ERR(rdesc);
@@ -579,14 +588,13 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 			*ret = -EINVAL;
 		}
 
-		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].cdr);
+		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].cdr, &rptr);
 		if (IS_ERR(cdesc)) {
 			dev_err(mtk->dev, "Cant get Cdesc");
 			*ret = PTR_ERR(cdesc);
 			break;
 		}
 
-		rptr = mtk_ring_cdr_index(mtk, cdesc);
 		buf = &mtk->ring[0].dma_buf[rptr];
 		if (buf->flags & MTK_DESC_FINISH)
 			*should_complete = true;
@@ -598,30 +606,18 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 			break;
 	}
 
-	if (!*should_complete)
+	if (!last_entry)
 		return ndesc;
 
 	if (!rctx->sg_src && !rctx->sg_dst && reqsrc == reqdst) {
 		dma_unmap_sg(mtk->dev, reqdst, rctx->dst_nents,
 			DMA_BIDIRECTIONAL);
-		goto get_sa;
+		goto update_iv;
 	}
 
 	if (rctx->sg_src) {
 		dma_unmap_sg(mtk->dev, rctx->sg_src,
 			sg_nents(rctx->sg_src), DMA_TO_DEVICE);
-
-		if (IS_ENCRYPT(rctx->flags)) {
-			dev_dbg(mtk->dev, "Encrypt:");
-			dev_dbg(mtk->dev, "Source buffer\n");
-			print_hex_dump_bytes("", DUMP_PREFIX_NONE,
-						sg_virt(rctx->sg_src) , len);
-		} else {
-			dev_dbg(mtk->dev, "Decrypt:");
-			dev_dbg(mtk->dev, "Source buffer\n");
-			print_hex_dump_bytes("", DUMP_PREFIX_NONE,
-				sg_virt(rctx->sg_src) , len + authsize);
-		}
 		mtk_free_sg_cpy(len + authsize, &rctx->sg_src);
 	} else
 		dma_unmap_sg(mtk->dev, reqsrc, sg_nents(reqsrc),
@@ -630,55 +626,31 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	if (rctx->sg_dst) {
 		dma_unmap_sg(mtk->dev, rctx->sg_dst,
 			sg_nents(rctx->sg_dst), DMA_FROM_DEVICE);
-		sg_copy_from_buffer(reqdst, sg_nents(reqdst),
-				sg_virt(rctx->sg_dst), len);
-
-		dev_dbg(mtk->dev, "Dest buffer\n");
+		/* EIP93 Little endian MD5; Big Endian all SHA */
+		if (authsize) {
+			if (!IS_HASH_MD5(rctx->flags)) {
+				otag = sg_virt(rctx->sg_dst) + len;
+				for (i = 0; i < (authsize /4); i++)
+					otag[i] = ntohl(otag[i]);
+			}
+		}
 		if (IS_ENCRYPT(rctx->flags))
-			print_hex_dump_bytes("", DUMP_PREFIX_NONE,
-					sg_virt(rctx->sg_dst) , len + authsize);
-			else
-			print_hex_dump_bytes("", DUMP_PREFIX_NONE,
-					sg_virt(rctx->sg_dst) , len);
+			auth = authsize;
 
-		if (authsize)
-			memcpy(otag, sg_virt(rctx->sg_dst) + len,
-					authsize);
-
+		sg_copy_from_buffer(reqdst, sg_nents(reqdst),
+				sg_virt(rctx->sg_dst), len + auth);
 		mtk_free_sg_cpy(len + authsize, &rctx->sg_dst);
 	} else
 		dma_unmap_sg(mtk->dev, reqdst, sg_nents(reqdst),
 					DMA_FROM_DEVICE);
 
-	if (!authsize)
-		goto get_sa;
-
-	/* EIP93 Little endian MD5; Big Endian all SHA */
-	dev_dbg(mtk->dev, "TAG: %d %d", authsize, rctx->authsize);
-	if (IS_ENCRYPT(rctx->flags))
-		print_hex_dump_bytes("", DUMP_PREFIX_NONE, otag, rctx->authsize);
-
-	if (!IS_HASH_MD5(rctx->flags)) {
-		for (i = 0; i < 8; i++)
-			otag[i] = ntohl(otag[i]);
-	}
-	if (IS_DECRYPT(rctx->flags))
-		print_hex_dump_bytes("", DUMP_PREFIX_NONE, otag, rctx->authsize);
-
-
-	if (IS_ENCRYPT(rctx->flags)) {
-		scatterwalk_map_and_copy(otag, reqdst, len, authsize, 1);
-	} else {
-		scatterwalk_map_and_copy(itag, reqsrc, len, authsize, 0);
-//		*ret = crypto_memneq(itag, otag, authsize) ? -EBADMSG : 0;
-	}
-
-get_sa:
-	if (IS_RFC3686(rctx->flags))
+	if (!*should_complete)
 		return ndesc;
 
-	/* API expects updated IV */
-	if (IS_CBC(rctx->flags) || IS_CTR(rctx->flags)) {
+	/* API expects updated IV for CBC and CTR (no RFC3686) */
+update_iv:
+	if ((!IS_RFC3686(rctx->flags)) &&
+		(IS_CBC(rctx->flags) || IS_CTR(rctx->flags))) {
 		saPointer = buf->saPointer;
 		saState = &mtk->saState[saPointer];
 		memcpy(reqiv, saState->stateIv, rctx->ivsize);
@@ -977,8 +949,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	struct crypto_authenc_keys keys;
 	int bs = crypto_shash_blocksize(ctx->shash);
 	int ds = crypto_shash_digestsize(ctx->shash);
-	u8 ipad[SHA512_BLOCK_SIZE] __aligned(sizeof(u32));
-	u8 opad[SHA512_BLOCK_SIZE] __aligned(sizeof(u32));
+	u8 *ipad, *opad;
 	unsigned int i, err;
 	u32 nonce;
 
@@ -1003,6 +974,12 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	 * EIP93 can only authenticate with hash of the key
 	 * do software shash until EIP93 hash function complete.
 	 */
+ 	ipad = kcalloc(2, SHA512_BLOCK_SIZE, GFP_KERNEL);
+ 	if (!ipad)
+ 		return -ENOMEM;
+
+ 	opad = ipad + SHA512_BLOCK_SIZE;
+
 	shash->tfm = ctx->shash;
 
 	if (keys.authkeylen > bs) {
@@ -1036,10 +1013,11 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	/* Encryption key */
 	mtk_ctx_saRecord(ctx, keys.enckey, nonce, keys.enckeylen, flags);
 	/* add auth key */
-	memcpy(&ctx->sa->saIDigest, ipad,SHA256_DIGEST_SIZE);
+	memcpy(&ctx->sa->saIDigest, ipad, SHA256_DIGEST_SIZE);
 	memcpy(&ctx->sa->saODigest, opad, SHA256_DIGEST_SIZE);
 
-	return 0;
+	kfree(ipad);
+	return err;
 
 badkey:
 	crypto_aead_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
@@ -1161,8 +1139,8 @@ struct mtk_alg_template mtk_alg_ecb_des = {
 		.ivsize	= 0,
 		.base = {
 			.cra_name = "ecb(des)",
-			.cra_driver_name = "eip93-ecb-des",
-			.cra_priority = 300,
+			.cra_driver_name = "ebc(des-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES_BLOCK_SIZE,
@@ -1187,8 +1165,8 @@ struct mtk_alg_template mtk_alg_cbc_des = {
 		.ivsize	= DES_BLOCK_SIZE,
 		.base = {
 			.cra_name = "cbc(des)",
-			.cra_driver_name = "eip93-cbc-des",
-			.cra_priority = 300,
+			.cra_driver_name = "cbc(des-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES_BLOCK_SIZE,
@@ -1213,8 +1191,8 @@ struct mtk_alg_template mtk_alg_ecb_des3_ede = {
 		.ivsize	= 0,
 		.base = {
 			.cra_name = "ecb(des3_ede)",
-			.cra_driver_name = "eip93-ecb-des3_ede",
-			.cra_priority = 300,
+			.cra_driver_name = "ecb(des3_ede-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
@@ -1239,8 +1217,8 @@ struct mtk_alg_template mtk_alg_cbc_des3_ede = {
 		.ivsize	= DES3_EDE_BLOCK_SIZE,
 		.base = {
 			.cra_name = "cbc(des3_ede)",
-			.cra_driver_name = "eip93-cbc-des3_ede",
-			.cra_priority = 300,
+			.cra_driver_name = "cbc(des3_ede-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
@@ -1265,8 +1243,8 @@ struct mtk_alg_template mtk_alg_ecb_aes = {
 		.ivsize	= 0,
 		.base = {
 			.cra_name = "ecb(aes)",
-			.cra_driver_name = "eip93-ecb-aes",
-			.cra_priority = 300,
+			.cra_driver_name = "ecb(aes-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1291,8 +1269,8 @@ struct mtk_alg_template mtk_alg_cbc_aes = {
 		.ivsize	= AES_BLOCK_SIZE,
 		.base = {
 			.cra_name = "cbc(aes)",
-			.cra_driver_name = "eip93-cbc-aes",
-			.cra_priority = 3000,
+			.cra_driver_name = "cbc(aes-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1317,8 +1295,8 @@ struct mtk_alg_template mtk_alg_ctr_aes = {
 		.ivsize	= AES_BLOCK_SIZE,
 		.base = {
 			.cra_name = "ctr(aes)",
-			.cra_driver_name = "eip93-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name = "ctr(aes-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
@@ -1343,8 +1321,8 @@ struct mtk_alg_template mtk_alg_rfc3686_aes = {
 		.ivsize	= CTR_RFC3686_IV_SIZE,
 		.base = {
 			.cra_name = "rfc3686(ctr(aes))",
-			.cra_driver_name = "eip93-rfc3686(ctr)-aes",
-			.cra_priority = 300,
+			.cra_driver_name = "rfc3686(ctr(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
@@ -1371,8 +1349,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_aes = {
 		.maxauthsize = MD5_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(md5),cbc(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-md5-cbc-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(md5-eip93), cbc(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1397,8 +1376,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_aes = {
 		.maxauthsize = SHA1_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha1),cbc(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-sha1-cbc-aes",
-			.cra_priority = 3000,
+			.cra_driver_name =
+				"authenc(hmac(sha1-eip93),cbc(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1423,8 +1403,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_aes = {
 		.maxauthsize = SHA224_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha224),cbc(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-sha224-cbc-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sha224-eip93),cbc(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1449,8 +1430,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes = {
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha256),cbc(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-sha256-cbc-aes",
-			.cra_priority = 3000,
+			.cra_driver_name =
+				"authenc(hmac(sha256-eip93),cbc(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1475,8 +1457,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_md5_ctr_aes = {
 		.maxauthsize = MD5_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(md5),ctr(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-md5-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(md5-eip93),ctr(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1501,8 +1484,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ctr_aes = {
 		.maxauthsize = SHA1_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha1),ctr(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-sha1-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sha1-eip93),ctr(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1527,8 +1511,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ctr_aes = {
 		.maxauthsize = SHA224_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha224),ctr(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-sh224-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sh224-eip93),ctr(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1553,8 +1538,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ctr_aes = {
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha256),ctr(aes))",
-			.cra_driver_name = "eip93-authenc-hmac-sha256-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sha256-eip93),ctr(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
@@ -1580,8 +1566,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_md5_rfc3686_aes = {
 		.maxauthsize = MD5_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(md5),rfc3686(ctr(aes)))",
-			.cra_driver_name = "eip93-authenc-hmac-md5-rfc3686-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+			"authenc(hmac(md5-eip93),rfc3686(ctr(aes-eip93)))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
@@ -1607,8 +1594,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha1_rfc3686_aes = {
 		.maxauthsize = SHA1_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha1),rfc3686(ctr(aes)))",
-			.cra_driver_name = "eip93-authenc-hmac-sha1-rfc3686-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+			"authenc(hmac(sha1-eip93),rfc3686(ctr(aes-eip93)))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
@@ -1634,8 +1622,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha224_rfc3686_aes = {
 		.maxauthsize = SHA224_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha224),rfc3686(ctr(aes)))",
-			.cra_driver_name = "eip93-authenc-hmac-sha224-rfc3686-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+			"authenc(hmac(sha224-eip93),rfc3686(ctr(aes-eip93)))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
@@ -1661,8 +1650,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes = {
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha256),rfc3686(ctr(aes)))",
-			.cra_driver_name = "eip93-authenc-hmac-sha256-rfc3686-ctr-aes",
-			.cra_priority = 300,
+			.cra_driver_name =
+			"authenc(hmac(sha256-eip93),rfc3686(ctr(aes-eip93)))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
@@ -1687,8 +1677,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des = {
 		.maxauthsize = MD5_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(md5),cbc(des))",
-			.cra_driver_name = "eip93-authenc-hmac-md5-cbc-des",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(md5-eip93),cbc(des-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES_BLOCK_SIZE,
@@ -1713,8 +1704,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des = {
 		.maxauthsize = SHA1_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha1),cbc(des))",
-			.cra_driver_name = "eip93-authenc-hmac-sha1-cbc-des",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sha1-eip93),cbc(des-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES_BLOCK_SIZE,
@@ -1739,8 +1731,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des = {
 		.maxauthsize = SHA224_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha224),cbc(des))",
-			.cra_driver_name = "eip93-authenc-hmac-sha224-cbc-des",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sha224-eip93),cbc(des-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES_BLOCK_SIZE,
@@ -1765,8 +1758,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des = {
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha256),cbc(des))",
-			.cra_driver_name = "eip93-authenc-hmac-sha256-cbc-des",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sha256-eip93),cbc(des-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES_BLOCK_SIZE,
@@ -1791,8 +1785,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des3_ede = {
 		.maxauthsize = MD5_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(md5),cbc(des3_ede))",
-			.cra_driver_name = "eip93-authenc-hmac-md5-cbc-3des",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(md5-eip93),cbc(des3_ede-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
@@ -1817,8 +1812,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des3_ede = {
 		.maxauthsize = SHA1_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha1),cbc(des3_ede))",
-			.cra_driver_name = "eip93-authenc-hmac-sha1-cbc-3des",
-			.cra_priority = 300,
+			.cra_driver_name =
+				"authenc(hmac(sha1-eip93),cbc(des3_ede-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
@@ -1843,8 +1839,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des3_ede = {
 		.maxauthsize = SHA224_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha224),cbc(des3_ede))",
-			.cra_driver_name = "eip93-authenc-hmac-sha224-cbc-3des",
-			.cra_priority = 300,
+			.cra_driver_name =
+			"authenc(hmac(sha224-eip93),cbc(des3_ede-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
@@ -1869,8 +1866,9 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des3_ede = {
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha256),cbc(des3_ede))",
-			.cra_driver_name = "eip93-authenc-hmac-sha256-cbc-3des",
-			.cra_priority = 300,
+			.cra_driver_name =
+			"authenc(hmac(sha256-eip93),cbc(des3_ede-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = DES3_EDE_BLOCK_SIZE,

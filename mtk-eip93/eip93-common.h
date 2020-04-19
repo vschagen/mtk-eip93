@@ -91,6 +91,9 @@
 #define MTK_RING_BUSY			224
 #define NUM_AES_BYPASS			0
 #define MTK_QUEUE_LENGTH		128
+#define MTK_CRA_PRIORITY		1500
+
+
 #define MTK_DESC_ASYNC			BIT(0)
 #define MTK_DESC_SKCIPHER		BIT(1)
 #define MTK_DESC_AEAD			BIT(2)

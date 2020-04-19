@@ -5,31 +5,33 @@
  * Richard van Schagen <vschagen@cs.com>
  */
 
-int mtk_ring_first_cdr_index(struct mtk_device *mtk);
+inline int mtk_ring_first_cdr_index(struct mtk_device *mtk);
 
-int mtk_ring_curr_wptr_index(struct mtk_device *mtk);
+inline int mtk_ring_curr_wptr_index(struct mtk_device *mtk);
 
-int mtk_ring_curr_rptr_index(struct mtk_device *mtk);
+inline int mtk_ring_curr_rptr_index(struct mtk_device *mtk);
 
-int mtk_ring_cdr_index(struct mtk_device *mtk,
-				struct eip93_descriptor_s *cdesc);
+inline int mtk_ring_cdr_index(struct mtk_device *mtk,
+					struct eip93_descriptor_s *cdesc);
 
-int mtk_ring_rdr_index(struct mtk_device *mtk,
-				struct eip93_descriptor_s *rdesc);
+inline int mtk_ring_rdr_index(struct mtk_device *mtk,
+					struct eip93_descriptor_s *rdesc);
 
-void *mtk_ring_next_wptr(struct mtk_device *mtk, struct mtk_desc_ring *ring);
+inline void *mtk_ring_next_wptr(struct mtk_device *mtk,
+					struct mtk_desc_ring *ring, u32 *idx);
 
-void *mtk_ring_next_rptr(struct mtk_device *mtk, struct mtk_desc_ring *ring);
+inline void *mtk_ring_next_rptr(struct mtk_device *mtk,
+					struct mtk_desc_ring *ring, u32 *idx);
 
-void mtk_ring_rollback_wptr(struct mtk_device *mtk, struct mtk_desc_ring *ring);
+inline void mtk_ring_rollback_wptr(struct mtk_device *mtk,
+						struct mtk_desc_ring *ring);
 
-void *mtk_ring_curr_wptr(struct mtk_device *mtk);
+inline void *mtk_ring_curr_wptr(struct mtk_device *mtk);
 
-void *mtk_ring_curr_rptr(struct mtk_device *mtk);
+inline void *mtk_ring_curr_rptr(struct mtk_device *mtk);
 
-struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk,
-			dma_addr_t srcDma, dma_addr_t dstDma,
-			dma_addr_t saRecord_base, dma_addr_t saState_base,
-			u32 len, int hashFinal, int prngMode);
+inline struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk,
+								u32 *idx);
 
-struct eip93_descriptor_s *mtk_add_rdesc(struct mtk_device *mtk);
+inline struct eip93_descriptor_s *mtk_add_rdesc(struct mtk_device *mtk,
+								u32 *idx);

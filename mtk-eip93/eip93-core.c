@@ -112,7 +112,7 @@ static int mtk_register_algs(struct mtk_device *mtk)
 				mtk_algs[i]->alg.skcipher.base.cra_name);
 			ret = crypto_register_skcipher(&mtk_algs[i]->alg.skcipher);
 			break;
-	 	case MTK_ALG_TYPE_AEAD:
+		case MTK_ALG_TYPE_AEAD:
 			dev_dbg(mtk->dev, "registering: %s",
 				mtk_algs[i]->alg.aead.base.cra_name);
 			ret = crypto_register_aead(&mtk_algs[i]->alg.aead);
@@ -157,16 +157,15 @@ static inline void mtk_irq_clear(struct mtk_device *mtk, u32 mask)
 	__raw_readl(mtk->base + EIP93_REG_INT_CLR);
 }
 
-static inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
+inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
 {
 	int DescriptorCountDone = MTK_RING_SIZE - 1;
-//	int DescriptorPendingCount = 1;
 	int DescriptorDoneTimeout = 15;
 
 	DescriptorPendingCount = min_t(int, mtk->ring[0].requests, 8);
 
-//	if (!DescriptorPendingCount)
-//		return;
+	if (!DescriptorPendingCount)
+		return;
 
 	writel(BIT(1) | (DescriptorCountDone & GENMASK(10, 0)) |
 		(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
@@ -184,22 +183,22 @@ static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 	int ret, ndesc, rptr;
 	int nreq = 0;
 	int handled = 0;
+	u32 err = 0, idx;
 	bool should_complete;
 
 handle_results:
 	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
-	if (!nreq) {
+	if (!nreq)
 		goto requests_left;
-	}
 
 	rptr =  mtk_ring_first_cdr_index(mtk);
 	buf = &mtk->ring[0].dma_buf[rptr];
 	if (buf->flags & MTK_DESC_PRNG) {
-		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].cdr);
-		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr);
+		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].cdr, &idx);
+		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr, &idx);
 		buf->flags = 0;
-		mtk_prng_done(mtk, rdesc);
+		mtk_prng_done(mtk, err);
 		handled++;
 		goto acknowledge;
 	}
@@ -232,16 +231,16 @@ acknowledge:
 		spin_lock_bh(&mtk->ring[0].lock);
 		mtk->ring[0].requests -= handled;
 
-		if (mtk->ring[0].requests) {
-			spin_unlock_bh(&mtk->ring[0].lock);
-			handled = 0;
-			goto handle_results;
-		} else {
+		if (!mtk->ring[0].requests) {
 			mtk->ring[0].busy = false;
 			spin_unlock_bh(&mtk->ring[0].lock);
 			goto request_done;
 		}
+		spin_unlock_bh(&mtk->ring[0].lock);
+		handled = 0;
+		goto handle_results;
 	}
+
 requests_left:
 	spin_lock_bh(&mtk->ring[0].lock);
 	if (mtk->ring[0].requests) {
@@ -254,7 +253,6 @@ requests_left:
 
 	spin_unlock_bh(&mtk->ring[0].lock);
 request_done:
-//	printk("done: %d", ret);
 	mtk_irq_enable(mtk, BIT(1));
 
 	return;
@@ -270,8 +268,8 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 	if (irq_status & BIT(1)) {
 		mtk_irq_clear(mtk, BIT(1));
 		mtk_irq_disable(mtk, BIT(1));
-//		tasklet_schedule(&mtk->tasklet);
-		queue_work(mtk->ring[0].workdone, &mtk->ring[0].work_done.work);
+		tasklet_schedule(&mtk->tasklet);
+//		queue_work(mtk->ring[0].workdone, &mtk->ring[0].work_done.work);
 		return IRQ_HANDLED;
 	}
 
@@ -365,20 +363,20 @@ void mtk_initialize(struct mtk_device *mtk)
 		mtk->base + EIP93_REG_PE_BUF_THRESH);
 
 	/* Clear/ack all interrupts before disable all */
-//	mtk_irq_clear(mtk, 0xFFFFFFFF);
+	mtk_irq_clear(mtk, 0xFFFFFFFF);
 	mtk_irq_disable(mtk, 0xFFFFFFFF);
 
 	writel((DescriptorCountDone & GENMASK(10, 0)) |
-		(((DescriptorPendingCount -1 ) & GENMASK(10, 0)) << 16) |
+		(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
 		((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
 		mtk->base + EIP93_REG_PE_RING_THRESH);
 
 	regVal = readl(mtk->base + EIP93_REG_PE_REVISION);
-	dev_dbg(mtk->dev,"Rev: %08x", regVal);
+	dev_dbg(mtk->dev, "Rev: %08x", regVal);
 	regVal = readl(mtk->base + EIP93_REG_PE_OPTION_1);
-	dev_dbg(mtk->dev,"Opt1: %08x", regVal);
+	dev_dbg(mtk->dev, "Opt1: %08x", regVal);
 	regVal = readl(mtk->base + EIP93_REG_PE_OPTION_0);
-	dev_dbg(mtk->dev,"Opt0: %08x", regVal);
+	dev_dbg(mtk->dev, "Opt0: %08x", regVal);
 
 }
 
@@ -457,7 +455,7 @@ static int mtk_desc_init(struct mtk_device *mtk,
 
 	size = MTK_RING_SIZE * sizeof(struct saRecord_s);
 
-	// Create SA and State records
+	/* Create SA and State records */
 	size = (MTK_RING_SIZE * sizeof(struct saRecord_s));
 
 	mtk->saRecord = dma_alloc_coherent(mtk->dev, size,

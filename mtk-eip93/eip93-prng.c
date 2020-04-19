@@ -18,10 +18,11 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	struct eip93_descriptor_s *rdesc;
 	struct mtk_desc_buf *buf;
 	int cur = prng->cur_buf;
-	int wptr, len, mode;
+	int len, mode;
 	int DescriptorCountDone = MTK_RING_SIZE - 1;
 	int DescriptorDoneTimeout = 15;
 	int DescriptorPendingCount = 0;
+	u32 wptr = 0;
 
 	if (reset) {
 		len = 0;
@@ -35,11 +36,25 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	atomic_set(&prng->State, BUF_EMPTY);
 
 	spin_lock(&mtk->ring[0].desc_lock);
-	cdesc = mtk_add_cdesc(mtk, 0, (u32)prng->PRNGBuffer_dma[cur],
-				(u32)prng->PRNGSaRecord_dma, 0,
-				4080, 0, mode);
-	rdesc = mtk_add_rdesc(mtk);
-	wptr = mtk_ring_cdr_index(mtk, cdesc);
+	cdesc = mtk_add_cdesc(mtk, &wptr);
+
+	cdesc->peCrtlStat.bits.hostReady = 1;
+	cdesc->peCrtlStat.bits.prngMode = mode;
+	cdesc->peCrtlStat.bits.hashFinal = 0;
+	cdesc->peCrtlStat.bits.padCrtlStat = 0;
+	cdesc->peCrtlStat.bits.peReady = 0;
+	cdesc->srcAddr = 0;
+	cdesc->dstAddr = (u32)prng->PRNGBuffer_dma[cur];
+	cdesc->saAddr = (u32)prng->PRNGSaRecord_dma;
+	cdesc->stateAddr = 0;
+	cdesc->arc4Addr = 0;
+	cdesc->userId = 0;
+	cdesc->peLength.bits.byPass = 0;
+	cdesc->peLength.bits.length = 4080;
+	cdesc->peLength.bits.hostReady = 1;
+
+	rdesc = mtk_add_rdesc(mtk, &wptr);
+//	wptr = mtk_ring_cdr_index(mtk, cdesc);
 	buf = &mtk->ring[0].dma_buf[wptr];
 	buf->flags = MTK_DESC_PRNG | MTK_DESC_LAST | MTK_DESC_FINISH;
 	spin_unlock(&mtk->ring[0].desc_lock);
@@ -121,14 +136,10 @@ bool mtk_prng_init(struct mtk_device *mtk, bool fLongSA)
 	return mtk_prng_push_job(mtk, true);
 }
 
-void mtk_prng_done(struct mtk_device *mtk,
-			struct eip93_descriptor_s *rdesc)
+void mtk_prng_done(struct mtk_device *mtk, u32 err)
 {
 	struct mtk_prng_device *prng = mtk->prng;
-	int err;
 	int cur = prng->cur_buf;
-
-	err = rdesc->peCrtlStat.bits.errStatus;
 
 	if (err) {
 		dev_err(mtk->dev, "PRNG error: %d\n", err);
@@ -136,11 +147,9 @@ void mtk_prng_done(struct mtk_device *mtk,
 	}
 
 	/* Buffer refilled, invalidate cache */
-	dma_unmap_single(mtk->dev, prng->PRNGBuffer_dma[cur], 4080, DMA_FROM_DEVICE);
-/*
-	print_hex_dump_debug("rng refreshed buf@: ", DUMP_PREFIX_ADDRESS, 16, 4,
-			     bd->buf, RN_BUF_SIZE, 1);
-*/
+	dma_unmap_single(mtk->dev, prng->PRNGBuffer_dma[cur],
+							4080, DMA_FROM_DEVICE);
+
 	complete(&prng->Filled);
 }
 

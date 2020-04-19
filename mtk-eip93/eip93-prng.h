@@ -19,8 +19,7 @@ extern struct mtk_alg_template mtk_alg_cprng;
 
 bool mtk_prng_init(struct mtk_device *mtk, bool fLongSA);
 
-void mtk_prng_done(struct mtk_device *mtk,
-			struct eip93_descriptor_s *rdesc);
+void mtk_prng_done(struct mtk_device *mtk, u32 err);
 
 struct mtk_prng_ctx {
 	spinlock_t 		prng_lock;
