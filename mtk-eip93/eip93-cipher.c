@@ -115,54 +115,53 @@ inline void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 
 	saRecord->saCmd0.bits.cipher = 15;
 	switch ((flags & MTK_ALG_MASK)) {
-		case MTK_ALG_AES:
-			saRecord->saCmd0.bits.cipher = 3;
-			saRecord->saCmd1.bits.aesKeyLen = (keylen / 8);
-			break;
-		case MTK_ALG_3DES:
-			saRecord->saCmd0.bits.cipher = 1;
-			break;
-		case MTK_ALG_DES:
-			saRecord->saCmd0.bits.cipher = 0;
-			break;
+	case MTK_ALG_AES:
+		saRecord->saCmd0.bits.cipher = 3;
+		saRecord->saCmd1.bits.aesKeyLen = (keylen / 8);
+		break;
+	case MTK_ALG_3DES:
+		saRecord->saCmd0.bits.cipher = 1;
+		break;
+	case MTK_ALG_DES:
+		saRecord->saCmd0.bits.cipher = 0;
+		break;
 	}
 
 	saRecord->saCmd0.bits.saveHash = 1;
 
-	switch ((flags & MTK_HASH_MASK))
-	{
-		case MTK_HASH_SHA256:
-			saRecord->saCmd0.bits.hash = 3;
-			break;
-		case MTK_HASH_SHA224:
-			saRecord->saCmd0.bits.hash = 2;
-			break;
-		case MTK_HASH_SHA1:
-			saRecord->saCmd0.bits.hash = 1;
-			break;
-		case MTK_HASH_MD5:
-			saRecord->saCmd0.bits.hash = 0;
-			break;
-		default:
-			saRecord->saCmd0.bits.saveHash = 0;
-			saRecord->saCmd0.bits.hash = 15;
+	switch ((flags & MTK_HASH_MASK)) {
+	case MTK_HASH_SHA256:
+		saRecord->saCmd0.bits.hash = 3;
+		break;
+	case MTK_HASH_SHA224:
+		saRecord->saCmd0.bits.hash = 2;
+		break;
+	case MTK_HASH_SHA1:
+		saRecord->saCmd0.bits.hash = 1;
+		break;
+	case MTK_HASH_MD5:
+		saRecord->saCmd0.bits.hash = 0;
+		break;
+	default:
+		saRecord->saCmd0.bits.saveHash = 0;
+		saRecord->saCmd0.bits.hash = 15;
 	}
 
-	saRecord->saCmd0.bits.hdrProc = 0; // no header processing
-	saRecord->saCmd0.bits.padType = 3; // Zero padding
+	saRecord->saCmd0.bits.hdrProc = 0;
+	saRecord->saCmd0.bits.padType = 3;
 	saRecord->saCmd0.bits.extPad = 0;
-	saRecord->saCmd0.bits.scPad = 0; //no padding
+	saRecord->saCmd0.bits.scPad = 0;
 
 	switch ((flags & MTK_MODE_MASK)) {
-		case MTK_MODE_ECB:
-			saRecord->saCmd1.bits.cipherMode = 0;
-			break;
-		case MTK_MODE_CBC:
-			saRecord->saCmd1.bits.cipherMode = 1;
-			break;
-		case MTK_MODE_CTR:
-			saRecord->saCmd1.bits.cipherMode = 2;
-			break;
+	case MTK_MODE_ECB:
+		saRecord->saCmd1.bits.cipherMode = 0;
+		break;
+	case MTK_MODE_CBC:
+		saRecord->saCmd1.bits.cipherMode = 1;
+		break;
+	case MTK_MODE_CTR:
+		saRecord->saCmd1.bits.cipherMode = 2;
+		break;
 	}
 
 	saRecord->saCmd1.bits.byteOffset = 0;
@@ -298,9 +297,8 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 	 */
 	 buf->flags |= MTK_DESC_LAST;
 
-	 if (complete == true) {
+	 if (complete == true)
 		buf->flags |= MTK_DESC_FINISH;
-	}
 
 	*commands = ndesc_cdr;
 	*results = ndesc_rdr;
@@ -336,25 +334,23 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	u32 iv[AES_BLOCK_SIZE / sizeof(u32)];
 	int blksize = 1;
 
-	switch ((flags & MTK_ALG_MASK))
-	{
-		case MTK_ALG_AES:
-			blksize = AES_BLOCK_SIZE;
-			break;
-		case MTK_ALG_DES:
-			blksize = DES_BLOCK_SIZE;
-			break;
-		case MTK_ALG_3DES:
-			blksize = DES3_EDE_BLOCK_SIZE;
-			break;
+	switch ((flags & MTK_ALG_MASK))	{
+	case MTK_ALG_AES:
+		blksize = AES_BLOCK_SIZE;
+		break;
+	case MTK_ALG_DES:
+		blksize = DES_BLOCK_SIZE;
+		break;
+	case MTK_ALG_3DES:
+		blksize = DES3_EDE_BLOCK_SIZE;
+		break;
 	}
 
 	if (ctx->aead) {
 		if (IS_ENCRYPT(flags))
 			totlen_dst += authsize;
-		else {
+		else
 			totlen_src += authsize;
-		}
 	}
 
 	if (!IS_CTR(rctx->flags)) {
@@ -437,15 +433,15 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		start = ctr;
 		end = start + blocks - 1;
 		if (end < start) {
-		offset = AES_BLOCK_SIZE * -start;
-		/*
-		 * Increment the counter manually to cope with
-		 * the hardware counter overflow.
-		 */
-		ctr |= 0xffffffff;
-		iv[3] = cpu_to_be32(ctr);
-		crypto_inc((u8 *)iv, AES_BLOCK_SIZE);
-		complete = false;
+			offset = AES_BLOCK_SIZE * -start;
+			/*
+		 	* Increment the counter manually to cope with
+		 	* the hardware counter overflow.
+		 	*/
+			ctr = 0xffffffff;
+			iv[3] = cpu_to_be32(ctr);
+			crypto_inc((u8 *)iv, AES_BLOCK_SIZE);
+			complete = false;
 		}
 	}
 	/*
@@ -630,7 +626,7 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 		if (authsize) {
 			if (!IS_HASH_MD5(rctx->flags)) {
 				otag = sg_virt(rctx->sg_dst) + len;
-				for (i = 0; i < (authsize /4); i++)
+				for (i = 0; i < (authsize / 4); i++)
 					otag[i] = ntohl(otag[i]);
 			}
 		}
@@ -656,7 +652,7 @@ update_iv:
 		memcpy(reqiv, saState->stateIv, rctx->ivsize);
 	}
 
-	if IS_BUSY(rctx->flags) {
+	if (IS_BUSY(rctx->flags)) {
 		req = (struct crypto_async_request *)buf->req;
 		local_bh_disable();
 		req->complete(req, -EINPROGRESS);
@@ -720,8 +716,7 @@ static void mtk_skcipher_cra_exit(struct crypto_tfm *tfm)
 {
 	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
 
-	if (ctx->sa)
-		kfree(ctx->sa);
+	kfree(ctx->sa);
 
 	if (ctx->fallback)
 		crypto_free_sync_skcipher(ctx->fallback);
@@ -749,20 +744,19 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 		memcpy(&nonce, key + keylen, CTR_RFC3686_NONCE_SIZE);
 	}
 
-	switch ((flags & MTK_ALG_MASK))
-	{
-		case MTK_ALG_AES:
-			ret = aes_expandkey(&aes, key, keylen);
+	switch ((flags & MTK_ALG_MASK)) {
+	case MTK_ALG_AES:
+		ret = aes_expandkey(&aes, key, keylen);
+		break;
+	case MTK_ALG_DES:
+		ret = verify_skcipher_des_key(ctfm, key);
+		break;
+	case MTK_ALG_3DES:
+		if (keylen != DES3_EDE_KEY_SIZE) {
+			ret = -EINVAL;
 			break;
-		case MTK_ALG_DES:
-			ret = verify_skcipher_des_key(ctfm, key);
-			break;
-		case MTK_ALG_3DES:
-			if (keylen != DES3_EDE_KEY_SIZE) {
-				ret = -EINVAL;
-				break;
-			}
-			ret = verify_skcipher_des3_key(ctfm, key);
+		}
+		ret = verify_skcipher_des3_key(ctfm, key);
 	}
 
 	if (ret) {
@@ -934,8 +928,7 @@ static void mtk_aead_cra_exit(struct crypto_tfm *tfm)
 	if (ctx->shash)
 		crypto_free_shash(ctx->shash);
 
-	if (ctx->sa)
-		kfree(ctx->sa);
+	kfree(ctx->sa);
 }
 
 static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
@@ -974,11 +967,11 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	 * EIP93 can only authenticate with hash of the key
 	 * do software shash until EIP93 hash function complete.
 	 */
- 	ipad = kcalloc(2, SHA512_BLOCK_SIZE, GFP_KERNEL);
+	ipad = kcalloc(2, SHA512_BLOCK_SIZE, GFP_KERNEL);
  	if (!ipad)
  		return -ENOMEM;
 
- 	opad = ipad + SHA512_BLOCK_SIZE;
+	opad = ipad + SHA512_BLOCK_SIZE;
 
 	shash->tfm = ctx->shash;
 

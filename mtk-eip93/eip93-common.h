@@ -106,71 +106,67 @@
 /*
  * Interrupts of EIP93
  */
-typedef enum
-{
-    EIP93_INT_PE_CDRTHRESH_REQ =	BIT(0),
-    EIP93_INT_PE_RDRTHRESH_REQ =	BIT(1),
-    EIP93_INT_PE_OPERATION_DONE =	BIT(9),
-    EIP93_INT_PE_INBUFTHRESH_REQ =	BIT(10),
-    EIP93_INT_PE_OUTBURTHRSH_REQ =	BIT(11),
-    EIP93_INT_PE_PRNG_IRQ =		BIT(12),
-    EIP93_INT_PE_ERR_REG =		BIT(13),
-    EIP93_INT_PE_RD_DONE_IRQ =		BIT(16),
+
+typedef enum {
+	EIP93_INT_PE_CDRTHRESH_REQ =	BIT(0),
+	EIP93_INT_PE_RDRTHRESH_REQ =	BIT(1),
+	EIP93_INT_PE_OPERATION_DONE =	BIT(9),
+	EIP93_INT_PE_INBUFTHRESH_REQ =	BIT(10),
+	EIP93_INT_PE_OUTBURTHRSH_REQ =	BIT(11),
+	EIP93_INT_PE_PRNG_IRQ =		BIT(12),
+	EIP93_INT_PE_ERR_REG =		BIT(13),
+	EIP93_INT_PE_RD_DONE_IRQ =	BIT(16),
 } EIP93_InterruptSource_t;
 
-typedef union
-{
-	struct
-	{
-		unsigned int opCode		: 3;
-		unsigned int direction		: 1;
-		unsigned int opGroup		: 2;
-		unsigned int padType		: 2;
-		unsigned int cipher		: 4;
-		unsigned int hash		: 4;
-		unsigned int reserved2		: 1;
-		unsigned int scPad		: 1;
-		unsigned int extPad		: 1;
-		unsigned int hdrProc		: 1;
-		unsigned int digestLength	: 4;
-		unsigned int ivSource		: 2;
-		unsigned int hashSource		: 2;
-		unsigned int saveIv		: 1;
-		unsigned int saveHash		: 1;
-		unsigned int reserved1		: 2;
+typedef union {
+	struct {
+		unsigned int opCode		:3;
+		unsigned int direction		:1;
+		unsigned int opGroup		:2;
+		unsigned int padType		:2;
+		unsigned int cipher		:4;
+		unsigned int hash		:4;
+		unsigned int reserved2		:1;
+		unsigned int scPad		:1;
+		unsigned int extPad		:1;
+		unsigned int hdrProc		:1;
+		unsigned int digestLength	:4;
+		unsigned int ivSource		:2;
+		unsigned int hashSource		:2;
+		unsigned int saveIv		:1;
+		unsigned int saveHash		:1;
+		unsigned int reserved1		:2;
 	} bits;
 	unsigned int word;
 
 } saCmd0_t;
 
-typedef union
-{
+typedef union {
 	struct
 	{
-		unsigned int copyDigest		: 1;
-		unsigned int copyHeader		: 1;
-		unsigned int copyPayload	: 1;
-		unsigned int copyPad		: 1;
-		unsigned int reserved4		: 4;
-		unsigned int cipherMode		: 2;
-		unsigned int reserved3		: 1;
-		unsigned int sslMac		: 1;
-		unsigned int hmac		: 1;
-		unsigned int byteOffset		: 1;
-		unsigned int reserved2		: 2;
-		unsigned int hashCryptOffset	: 8;
-		unsigned int aesKeyLen		: 3;
-		unsigned int reserved1		: 1;
-		unsigned int aesDecKey		: 1;
-		unsigned int seqNumCheck	: 1;
-		unsigned int reserved0		: 2;
+		unsigned int copyDigest		:1;
+		unsigned int copyHeader		:1;
+		unsigned int copyPayload	:1;
+		unsigned int copyPad		:1;
+		unsigned int reserved4		:4;
+		unsigned int cipherMode		:2;
+		unsigned int reserved3		:1;
+		unsigned int sslMac		:1;
+		unsigned int hmac		:1;
+		unsigned int byteOffset		:1;
+		unsigned int reserved2		:2;
+		unsigned int hashCryptOffset	:8;
+		unsigned int aesKeyLen		:3;
+		unsigned int reserved1		:1;
+		unsigned int aesDecKey		:1;
+		unsigned int seqNumCheck	:1;
+		unsigned int reserved0		:2;
 	} bits;
 	unsigned int word;
 
 } saCmd1_t;
 
-typedef struct saRecord_s
-{
+typedef struct saRecord_s {
 	saCmd0_t	saCmd0;
 	saCmd1_t	saCmd1;
 	unsigned int	saKey[8];
@@ -182,46 +178,40 @@ typedef struct saRecord_s
 	unsigned int	saNonce;
 } saRecord_t;
 
-typedef struct saState_s
-{
+typedef struct saState_s {
 	unsigned int	stateIv[4];
 	unsigned int	stateByteCnt[2];
 	unsigned int	stateIDigest[8];
 } saState_t;
 
-typedef union
-{
-	struct
-	{
-		unsigned int hostReady		: 1;
-		unsigned int peReady		: 1;
-		unsigned int reserved		: 1;
-		unsigned int initArc4		: 1;
-		unsigned int hashFinal		: 1;
-		unsigned int haltMode		: 1;
-		unsigned int prngMode		: 2;
-		unsigned int padValue		: 8;
-		unsigned int errStatus		: 8;
-		unsigned int padCrtlStat	: 8;
+typedef union {
+	struct {
+		unsigned int hostReady		:1;
+		unsigned int peReady		:1;
+		unsigned int reserved		:1;
+		unsigned int initArc4		:1;
+		unsigned int hashFinal		:1;
+		unsigned int haltMode		:1;
+		unsigned int prngMode		:2;
+		unsigned int padValue		:8;
+		unsigned int errStatus		:8;
+		unsigned int padCrtlStat	:8;
 	} bits;
 	unsigned int word;
 } peCrtlStat_t;
 
-typedef union
-{
-	struct
-	{
-		unsigned int length		: 20;
-		unsigned int reserved		: 2;
-		unsigned int hostReady		: 1;
-		unsigned int peReady		: 1;
-		unsigned int byPass		: 8;
+typedef union {
+	struct {
+		unsigned int length		:20;
+		unsigned int reserved		:2;
+		unsigned int hostReady		:1;
+		unsigned int peReady		:1;
+		unsigned int byPass		:8;
 	} bits;
 	unsigned int word;
 } peLength_t;
 
-typedef struct eip93_descriptor_s
-{
+typedef struct eip93_descriptor_s {
 	peCrtlStat_t		peCrtlStat;
 	unsigned int		srcAddr;
 	unsigned int		dstAddr;
