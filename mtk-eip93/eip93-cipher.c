@@ -50,7 +50,7 @@ inline int mtk_make_sg_cpy(struct scatterlist *src, struct scatterlist **dst,
 		return -ENOMEM;
 	}
 	/* allocate enough memory for full scatterlist */
-	totallen = rctx->assoclen + rctx->textsize + 32; //rctx->authsize;
+	totallen = rctx->assoclen + rctx->textsize + rctx->authsize;
 
 	pages = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA,
 					get_order(totallen));
