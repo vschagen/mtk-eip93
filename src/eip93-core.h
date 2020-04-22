@@ -85,6 +85,7 @@ struct mtk_ring {
 	/* descriptor scatter/gather record */
 	struct mtk_desc_buf		*dma_buf;
 	spinlock_t			desc_lock;
+	spinlock_t			rdesc_lock;
 
 	/* Number of request in the engine. */
 	int				requests;

@@ -23,7 +23,6 @@
 #include "eip93-core.h"
 #include "eip93-ring.h"
 #include "eip93-cipher.h"
-#include "eip93-hash.h"
 #include "eip93-prng.h"
 
 static struct mtk_alg_template *mtk_algs[] = {
@@ -49,17 +48,17 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_md5_cbc_aes,
+//	&mtk_alg_authenc_hmac_md5_cbc_aes,
 	&mtk_alg_authenc_hmac_sha1_cbc_aes,
-	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
 	&mtk_alg_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_authenc_hmac_md5_ctr_aes,
 //	&mtk_alg_authenc_hmac_sha1_ctr_aes,
 //	&mtk_alg_authenc_hmac_sha224_ctr_aes,
 //	&mtk_alg_authenc_hmac_sha256_ctr_aes,
-	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
-	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
 //	&mtk_alg_authenc_hmac_md5_ecb_null,
 //	&mtk_alg_authenc_hmac_sha1_ecb_null,
@@ -167,7 +166,7 @@ inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
 	if (!DescriptorPendingCount)
 		return;
 
-	writel(BIT(1) | (DescriptorCountDone & GENMASK(10, 0)) |
+	writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
 		(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
 		((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
 		mtk->base + EIP93_REG_PE_RING_THRESH);
@@ -537,6 +536,8 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	spin_lock_init(&mtk->ring[0].lock);
 	spin_lock_init(&mtk->ring[0].desc_lock);
+	spin_lock_init(&mtk->ring[0].rdesc_lock);
+
 
 	mtk->ring[0].work_done.mtk = mtk;
 	INIT_WORK(&mtk->ring[0].work_done.work, mtk_done_work);

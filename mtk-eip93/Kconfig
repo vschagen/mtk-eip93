@@ -1,5 +1,0 @@
-# SPDX-License-Identifier: GPL-2.0
-config MTK_EIP93
-	tristate "MTK EIP93 support"
-	depends on RALINK && SOC_MT7621
-

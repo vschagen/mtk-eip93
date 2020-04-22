@@ -16,16 +16,14 @@ This should be added to your device DTS or better yet to the mt7621.dtsi:
 	};
 
 It enables hardware crypto for:
-* DES-ECB/CBC
-* 3DES-ECB/CBC
-* AES-ECB/CBC/CTR with 128/192/256 keysize.
+* des ecb/cbc
+* 3des ecb/cbc
+* aes ecb / cbc / ctr /rfc3686 with 128/192/256 keysize.
 
 
 Authentication:
+* authenc(hmac(md5/sha1/sha224/sha256), des / 3des - cbc)
+* authenc(hmac(md5/sha1/224/256, des / 3des - cbc)
+* authenc(hmac(sha1/sha256), cbc / ctr /rfc3686 - aes) with 128/192/256 keysize
 
-AEAD(HMAC(MD5/SHA1/224/256, DES/3DES-CBC)
-AEAD(HMAC(SHA1/224/256),CBC(AES))
-
-Testing has been done on Linux Kernel v5.4.31 with all the extended tests enabled.
-Sofar ALL tests are passed. However still issues getting this to work with IPSEC.
-
+Testing has been done on Linux Kernel v5.4.33 with all the extended tests enabled.

@@ -552,6 +552,7 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 
 	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
+	spin_lock(&mtk->ring[0].rdesc_lock);
 	while (ndesc < nreq) {
 		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr, &rptr);
 		if (IS_ERR(rdesc)) {
@@ -601,6 +602,7 @@ inline int mtk_req_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 		if (last_entry)
 			break;
 	}
+	spin_unlock(&mtk->ring[0].rdesc_lock);
 
 	if (!last_entry)
 		return ndesc;
@@ -829,9 +831,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	mtk->ring[0].requests += commands;
 
 	if (!mtk->ring[0].busy) {
-//		DescriptorPendingCount = mtk->ring[0].requests;
-		DescriptorPendingCount = min_t(int, mtk->ring[0].requests, 8);
-
+		DescriptorPendingCount = min_t(int, mtk->ring[0].requests, 32);
 		writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
 			(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
 			((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
