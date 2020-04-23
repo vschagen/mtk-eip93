@@ -816,6 +816,9 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 		return ret;
 	}
 
+	if (mtk->ring[0].requests > MTK_RING_BUSY)
+		return -EAGAIN;
+
 	ret = mtk_send_req(base, ctx, req->src, req->dst, req->iv,
 				rctx, &commands, &results);
 
@@ -1055,6 +1058,9 @@ static int mtk_aead_crypt(struct aead_request *req)
 
 	if (!rctx->textsize)
 		return 0;
+
+	if (mtk->ring[0].requests > MTK_RING_BUSY)
+		return -EAGAIN;
 
 	ret = mtk_send_req(base, ctx, req->src, req->dst, req->iv,
 				rctx, &commands, &results);
