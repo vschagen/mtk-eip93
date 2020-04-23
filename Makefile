@@ -28,7 +28,7 @@ define KernelPackage/crypto-hw-eip93
   KCONFIG:=
   TITLE:=MTK EIP93 crypto module.
   FILES:=$(PKG_BUILD_DIR)/crypto-hw-eip93.ko
-  AUTOLOAD:=$(call AutoProbe,crypto-hw-mtk-eip93)
+  AUTOLOAD:=$(call AutoProbe,crypto-hw-eip93)
 endef
 
 define KernelPackage/crypto-hw-eip93/description
