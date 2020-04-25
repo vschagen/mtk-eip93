@@ -89,7 +89,7 @@
 
 #define MTK_RING_SIZE			256
 #define MTK_RING_BUSY			224
-#define NUM_AES_BYPASS			0
+#define NUM_AES_BYPASS			256
 #define MTK_QUEUE_LENGTH		128
 #define MTK_CRA_PRIORITY		1500
 

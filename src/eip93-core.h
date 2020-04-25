@@ -27,6 +27,7 @@ struct mtk_device {
 	struct device		*dev;
 	struct clk		*clk;
 	int			irq;
+
 	struct tasklet_struct	tasklet;
 
 	struct mtk_ring		*ring;

@@ -48,23 +48,23 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
-//	&mtk_alg_authenc_hmac_md5_cbc_aes,
+	&mtk_alg_authenc_hmac_md5_cbc_aes,
 	&mtk_alg_authenc_hmac_sha1_cbc_aes,
-//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+	&mtk_alg_authenc_hmac_sha224_cbc_aes,
 	&mtk_alg_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_authenc_hmac_md5_ctr_aes,
 //	&mtk_alg_authenc_hmac_sha1_ctr_aes,
 //	&mtk_alg_authenc_hmac_sha224_ctr_aes,
 //	&mtk_alg_authenc_hmac_sha256_ctr_aes,
-//	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
+	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
-//	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
+	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
-//	&mtk_alg_authenc_hmac_md5_ecb_null,
-//	&mtk_alg_authenc_hmac_sha1_ecb_null,
-//	&mtk_alg_authenc_hmac_sha224_ecb_null,
-//	&mtk_alg_authenc_hmac_sha256_ecb_null,
-//	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
+	&mtk_alg_authenc_hmac_md5_ecb_null,
+	&mtk_alg_authenc_hmac_sha1_ecb_null,
+	&mtk_alg_authenc_hmac_sha224_ecb_null,
+	&mtk_alg_authenc_hmac_sha256_ecb_null,
+	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
 };
@@ -268,7 +268,7 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 		mtk_irq_clear(mtk, BIT(1));
 		mtk_irq_disable(mtk, BIT(1));
 		tasklet_schedule(&mtk->tasklet);
-//		queue_work(mtk->ring[0].workdone, &mtk->ring[0].work_done.work);
+//		queue_work_on(mtk->cpu + 1, mtk->ring[0].workdone, &mtk->ring[0].work_done.work);
 		return IRQ_HANDLED;
 	}
 
