@@ -127,6 +127,7 @@ inline void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 		break;
 	}
 
+	saRecord->saCmd0.bits.hash = 15;
 	switch ((flags & MTK_HASH_MASK)) {
 	case MTK_HASH_SHA256:
 		saRecord->saCmd0.bits.hash = 3;
@@ -140,8 +141,6 @@ inline void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 	case MTK_HASH_MD5:
 		saRecord->saCmd0.bits.hash = 0;
 		break;
-	default:
-		saRecord->saCmd0.bits.hash = 15;
 	}
 
 	saRecord->saCmd0.bits.hdrProc = 0;
@@ -150,14 +149,14 @@ inline void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 	saRecord->saCmd0.bits.scPad = 0;
 
 	switch ((flags & MTK_MODE_MASK)) {
-	case MTK_MODE_ECB:
-		saRecord->saCmd1.bits.cipherMode = 0;
-		break;
 	case MTK_MODE_CBC:
 		saRecord->saCmd1.bits.cipherMode = 1;
 		break;
 	case MTK_MODE_CTR:
 		saRecord->saCmd1.bits.cipherMode = 2;
+		break;
+	case MTK_MODE_ECB:
+		saRecord->saCmd1.bits.cipherMode = 0;
 		break;
 	}
 
@@ -1475,114 +1474,6 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes = {
 			.cra_name = "authenc(hmac(sha256),cbc(aes))",
 			.cra_driver_name =
 				"authenc(hmac(sha256-eip93),cbc(aes-eip93))",
-			.cra_priority = MTK_CRA_PRIORITY,
-			.cra_flags = CRYPTO_ALG_ASYNC |
-					CRYPTO_ALG_KERN_DRIVER_ONLY,
-			.cra_blocksize = AES_BLOCK_SIZE,
-			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
-			.cra_alignmask = 0,
-			.cra_init = mtk_aead_cra_init,
-			.cra_exit = mtk_aead_cra_exit,
-			.cra_module = THIS_MODULE,
-		},
-	},
-};
-
-struct mtk_alg_template mtk_alg_authenc_hmac_md5_ctr_aes = {
-	.type = MTK_ALG_TYPE_AEAD,
-	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CTR | MTK_ALG_AES,
-	.alg.aead = {
-		.setkey = mtk_aead_setkey,
-		.encrypt = mtk_aead_encrypt,
-		.decrypt = mtk_aead_decrypt,
-		.ivsize	= AES_BLOCK_SIZE,
-		.setauthsize = mtk_aead_setauthsize,
-		.maxauthsize = MD5_DIGEST_SIZE,
-		.base = {
-			.cra_name = "authenc(hmac(md5),ctr(aes))",
-			.cra_driver_name =
-				"authenc(hmac(md5-eip93),ctr(aes-eip93))",
-			.cra_priority = MTK_CRA_PRIORITY,
-			.cra_flags = CRYPTO_ALG_ASYNC |
-					CRYPTO_ALG_KERN_DRIVER_ONLY,
-			.cra_blocksize = AES_BLOCK_SIZE,
-			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
-			.cra_alignmask = 0,
-			.cra_init = mtk_aead_cra_init,
-			.cra_exit = mtk_aead_cra_exit,
-			.cra_module = THIS_MODULE,
-		},
-	},
-};
-
-struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ctr_aes = {
-	.type = MTK_ALG_TYPE_AEAD,
-	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_MODE_CTR | MTK_ALG_AES,
-	.alg.aead = {
-		.setkey = mtk_aead_setkey,
-		.encrypt = mtk_aead_encrypt,
-		.decrypt = mtk_aead_decrypt,
-		.ivsize	= AES_BLOCK_SIZE,
-		.setauthsize = mtk_aead_setauthsize,
-		.maxauthsize = SHA1_DIGEST_SIZE,
-		.base = {
-			.cra_name = "authenc(hmac(sha1),ctr(aes))",
-			.cra_driver_name =
-				"authenc(hmac(sha1-eip93),ctr(aes-eip93))",
-			.cra_priority = MTK_CRA_PRIORITY,
-			.cra_flags = CRYPTO_ALG_ASYNC |
-					CRYPTO_ALG_KERN_DRIVER_ONLY,
-			.cra_blocksize = AES_BLOCK_SIZE,
-			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
-			.cra_alignmask = 0,
-			.cra_init = mtk_aead_cra_init,
-			.cra_exit = mtk_aead_cra_exit,
-			.cra_module = THIS_MODULE,
-		},
-	},
-};
-
-struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ctr_aes = {
-	.type = MTK_ALG_TYPE_AEAD,
-	.flags = MTK_HASH_HMAC | MTK_HASH_SHA224 | MTK_MODE_CTR | MTK_ALG_AES,
-	.alg.aead = {
-		.setkey = mtk_aead_setkey,
-		.encrypt = mtk_aead_encrypt,
-		.decrypt = mtk_aead_decrypt,
-		.ivsize	= AES_BLOCK_SIZE,
-		.setauthsize = mtk_aead_setauthsize,
-		.maxauthsize = SHA224_DIGEST_SIZE,
-		.base = {
-			.cra_name = "authenc(hmac(sha224),ctr(aes))",
-			.cra_driver_name =
-				"authenc(hmac(sh224-eip93),ctr(aes-eip93))",
-			.cra_priority = MTK_CRA_PRIORITY,
-			.cra_flags = CRYPTO_ALG_ASYNC |
-					CRYPTO_ALG_KERN_DRIVER_ONLY,
-			.cra_blocksize = AES_BLOCK_SIZE,
-			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
-			.cra_alignmask = 0,
-			.cra_init = mtk_aead_cra_init,
-			.cra_exit = mtk_aead_cra_exit,
-			.cra_module = THIS_MODULE,
-		},
-	},
-};
-
-struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ctr_aes = {
-	.type = MTK_ALG_TYPE_AEAD,
-	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 | MTK_MODE_CTR | MTK_ALG_AES,
-	.alg.aead = {
-		.setkey = mtk_aead_setkey,
-		.encrypt = mtk_aead_encrypt,
-		.decrypt = mtk_aead_decrypt,
-		.ivsize	= AES_BLOCK_SIZE,
-		.setauthsize = mtk_aead_setauthsize,
-		.maxauthsize = SHA256_DIGEST_SIZE,
-		.base = {
-			.cra_name = "authenc(hmac(sha256),ctr(aes))",
-			.cra_driver_name =
-				"authenc(hmac(sha256-eip93),ctr(aes-eip93))",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
