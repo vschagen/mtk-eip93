@@ -203,6 +203,7 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 	int offsetin = 0, offsetout = 0;
 	u32 n, len;
 	dma_addr_t saddr, daddr;
+	u32 srcAddr, dstAddr;
 	bool nextin = false;
 	bool nextout = false;
 	struct eip93_descriptor_s *cdesc;
@@ -239,6 +240,8 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 			offsetout = 0;
 			nextout = false;
 		}
+		srcAddr = saddr + offsetin;
+		dstAddr = daddr + offsetout;
 		if (remainin == remainout) {
 			len = remainin;
 				nextin = true;
@@ -268,8 +271,8 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 		cdesc->peCrtlStat.bits.hashFinal = 1;
 		cdesc->peCrtlStat.bits.padCrtlStat = 0;
 		cdesc->peCrtlStat.bits.peReady = 0;
-		cdesc->srcAddr = saddr + offsetin;
-		cdesc->dstAddr = daddr + offsetout;
+		cdesc->srcAddr = srcAddr;
+		cdesc->dstAddr = dstAddr;
 		cdesc->saAddr = saRecord_base;
 		cdesc->stateAddr = saState_base;
 		cdesc->arc4Addr = saState_base;
