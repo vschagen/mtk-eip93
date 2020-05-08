@@ -9,15 +9,11 @@
 
 #include <linux/atomic.h>
 #include <linux/completion.h>
+#include <linux/dmapool.h>
 #include <crypto/aead.h>
 #include <crypto/internal/hash.h>
 #include <crypto/internal/rng.h>
 #include <crypto/internal/skcipher.h>
-
-struct mtk_work_data {
-	struct work_struct	work;
-	struct mtk_device	*mtk;
-};
 
 /**
  * struct mtk_device - crypto engine device structure
@@ -28,39 +24,25 @@ struct mtk_device {
 	struct clk		*clk;
 	int			irq;
 
-	struct tasklet_struct	tasklet;
+	struct tasklet_struct	dequeue;
+	struct tasklet_struct	done;
 
 	struct mtk_ring		*ring;
 
-	struct saRecord_s	*saRecord;
-	struct saState_s	*saState;
-	dma_addr_t		saState_base;
-	dma_addr_t		saRecord_base;
+	struct dma_pool		*saRecord_pool;
+	struct dma_pool		*saState_pool;
 
 	struct mtk_prng_device	*prng;
 };
-
 
 struct mtk_prng_device {
 	struct saRecord_s	*PRNGSaRecord;
 	dma_addr_t		PRNGSaRecord_dma;
 	void 			*PRNGBuffer[2];
 	dma_addr_t		PRNGBuffer_dma[2];
-	struct completion 	Filled;
 	uint32_t		cur_buf;
+	struct completion 	Filled;
 	atomic_t		State;
-};
-
-/**
- * struct mtk_desc_buf - holds the records associated with the ringbuffer
- * @flags: Flags to indicate e.g. last block.
- * @req: crypto_async_request
- * @saPointer: reference to saState to retreive IV
- */
-struct mtk_desc_buf {
-	u32		flags;
-	u32		*req;
-	u32		saPointer;
 };
 
 struct mtk_desc_ring {
@@ -76,35 +58,21 @@ struct mtk_desc_ring {
 
 struct mtk_ring {
 	spinlock_t			lock;
-
-	struct workqueue_struct		*workdone;
-	struct mtk_work_data		work_done;
-
 	/* command/result rings */
 	struct mtk_desc_ring		cdr;
 	struct mtk_desc_ring		rdr;
-	/* descriptor scatter/gather record */
-	struct mtk_desc_buf		*dma_buf;
-	spinlock_t			desc_lock;
-	spinlock_t			rdesc_lock;
-
+	spinlock_t			write_lock;
+	spinlock_t			read_lock;
 	/* Number of request in the engine. */
 	int				requests;
-
 	/* The rings is handling at least one request */
 	bool				busy;
-
-	/* Store for current request when not
-	 * enough resources avialable.
-	 */
-	struct crypto_async_request	*req;
-	struct crypto_async_request	*backlog;
 };
 
 struct mtk_context {
-	int (*handle_result)(struct mtk_device *mtk,
+	void (*handle_result)(struct mtk_device *mtk,
 				struct crypto_async_request *req,
-				bool *complete,  int *ret);
+				bool complete,  int err);
 };
 
 enum mtk_alg_type {

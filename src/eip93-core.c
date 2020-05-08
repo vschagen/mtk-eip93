@@ -8,6 +8,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
+#include <linux/dmapool.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -54,7 +55,7 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_ecb_null,
 	&mtk_alg_authenc_hmac_sha224_ecb_null,
 	&mtk_alg_authenc_hmac_sha256_ecb_null,
-	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
+//	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
 };
@@ -151,7 +152,7 @@ inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
 	int DescriptorCountDone = MTK_RING_SIZE - 1;
 	int DescriptorDoneTimeout = 15;
 
-	DescriptorPendingCount = min_t(int, mtk->ring[0].requests, 8);
+	DescriptorPendingCount = min_t(int, mtk->ring->requests, 8);
 
 	if (!DescriptorPendingCount)
 		return;
@@ -164,86 +165,112 @@ inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
 
 static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 {
-	struct crypto_async_request *req = NULL;
+	struct crypto_async_request *async = NULL;
 	struct mtk_context *ctx;
-	struct mtk_desc_buf *buf;
 	struct eip93_descriptor_s *cdesc;
 	struct eip93_descriptor_s *rdesc;
-	int ret, ndesc, rptr;
-	int nreq = 0;
-	int handled = 0;
-	u32 err = 0, idx;
-	bool should_complete;
+	int handled = 0, nreq;
+	int try, ret, err = 0;
+	volatile int done1, done2;
+	bool last_entry = false;
+	bool complete = false;
+	u32 flags;
 
-handle_results:
-	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
+get_more:
+	try = 1;
+	while (try--) {
+		nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
+		if (nreq)
+			break;
+	}
 
 	if (!nreq)
-		goto requests_left;
+		goto push_request;
 
-	rptr =  mtk_ring_first_cdr_index(mtk);
-	buf = &mtk->ring[0].dma_buf[rptr];
-	if (buf->flags & MTK_DESC_PRNG) {
-		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].cdr, &idx);
-		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring[0].rdr, &idx);
-		buf->flags = 0;
-		mtk_prng_done(mtk, err);
+	while (nreq) {
+		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
+		if (IS_ERR(rdesc)) {
+			dev_err(mtk->dev, "Ndesc: %d nreq: %d\n", handled, nreq);
+			ret = -EIO;
+			break;
+		}
+		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring->cdr);
+		if (IS_ERR(cdesc)) {
+			dev_err(mtk->dev, "Cant get Cdesc");
+			ret = -EIO;
+			break;
+		}
+		/* make sure EIP93 finished writing all data
+		 * (volatile int) used since bits will be updated via DMA
+		*/
+		try = 0;
+		while (try < 1000) {
+			done1 = (volatile int)rdesc->peCrtlStat.bits.peReady;
+			done2 = (volatile int)rdesc->peLength.bits.peReady;
+			if ((!done1) || (!done2)) {
+					try++;
+					cpu_relax();
+					continue;
+			}
+			break;
+		}
+		/*
+		if (try)
+			dev_err(mtk->dev, "EIP93 try-count: %d", try);
+		*/
+		err = rdesc->peCrtlStat.bits.errStatus;
+		if (err) {
+			dev_err(mtk->dev, "Err: %02x\n", err);
+		}
+
 		handled++;
-		goto acknowledge;
+
+		flags = rdesc->userId;
+		if (flags & MTK_DESC_FINISH)
+			complete = true;
+
+		if (flags & MTK_DESC_LAST) {
+			last_entry = true;
+			break;
+		}
 	}
 
-	if (buf->flags & MTK_DESC_ASYNC)
-		req = (struct crypto_async_request *)buf->req;
-	else
-		goto acknowledge;
+	if (last_entry) {
+		last_entry = false;
+		if (flags & MTK_DESC_PRNG)
+			mtk_prng_done(mtk, err);
 
-	ctx = crypto_tfm_ctx(req->tfm);
-	ndesc = ctx->handle_result(mtk, req, &should_complete, &ret);
-
-	if (ndesc < 0) {
-		dev_err(mtk->dev, "failed get result\n");
-		goto acknowledge;
+		if (flags & MTK_DESC_ASYNC) {
+			async = (struct crypto_async_request *)rdesc->arc4Addr;
+			ctx = crypto_tfm_ctx(async->tfm);
+			ctx->handle_result(mtk, async, complete, err);
+		}
 	}
 
-	if (should_complete) {
-		local_bh_disable();
-		req->complete(req, ret);
-		local_bh_enable();
-	}
-
-	handled += ndesc;
-
-acknowledge:
 	if (handled) {
 		writel(handled, mtk->base + EIP93_REG_PE_RD_COUNT);
-
-		spin_lock_bh(&mtk->ring[0].lock);
-		mtk->ring[0].requests -= handled;
-
-		if (!mtk->ring[0].requests) {
-			mtk->ring[0].busy = false;
-			spin_unlock_bh(&mtk->ring[0].lock);
-			goto request_done;
+		spin_lock(&mtk->ring->lock);
+		mtk->ring->requests -= handled;
+		if (!mtk->ring->requests) {
+			mtk->ring->busy = false;
+			spin_unlock(&mtk->ring->lock);
+			goto queue_done;
 		}
-		spin_unlock_bh(&mtk->ring[0].lock);
+		spin_unlock(&mtk->ring->lock);
 		handled = 0;
-		goto handle_results;
+		goto get_more;
 	}
+push_request:
+	spin_lock(&mtk->ring->lock);
+	if (mtk->ring->requests)
+		mtk_push_request(mtk, mtk->ring->requests);
+	else
+		mtk->ring->busy = false;
 
-requests_left:
-	spin_lock_bh(&mtk->ring[0].lock);
-	if (mtk->ring[0].requests) {
-		ret = mtk->ring[0].requests;
-		mtk_push_request(mtk, mtk->ring[0].requests);
-	} else {
-		mtk->ring[0].busy = false;
-		ret = 0;
-	}
+	spin_unlock(&mtk->ring->lock);
 
-	spin_unlock_bh(&mtk->ring[0].lock);
-request_done:
+queue_done:
 	mtk_irq_enable(mtk, BIT(1));
-
 	return;
 }
 
@@ -257,8 +284,7 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 	if (irq_status & BIT(1)) {
 		mtk_irq_clear(mtk, BIT(1));
 		mtk_irq_disable(mtk, BIT(1));
-		tasklet_schedule(&mtk->tasklet);
-//		queue_work_on(mtk->cpu + 1, mtk->ring[0].workdone, &mtk->ring[0].work_done.work);
+		tasklet_hi_schedule(&mtk->done);
 		return IRQ_HANDLED;
 	}
 
@@ -279,19 +305,11 @@ static void mtk_done_tasklet(unsigned long data)
 	mtk_handle_result_descriptor(mtk);
 }
 
-static void mtk_done_work(struct work_struct *work)
-{
-	struct mtk_work_data *data =
-		container_of(work, struct mtk_work_data, work);
-
-	mtk_handle_result_descriptor(data->mtk);
-}
-
 void mtk_initialize(struct mtk_device *mtk)
 {
 	uint8_t fRstPacketEngine = 1;
 	uint8_t fResetRing = 1;
-	uint8_t PE_Mode = 3; /* Auto Ring Mode */
+	uint8_t PE_Mode = 3;
 	uint8_t fBO_PD_en = 0;
 	uint8_t fBO_SA_en = 0 ;
 	uint8_t fBO_Data_en = 0;
@@ -301,7 +319,7 @@ void mtk_initialize(struct mtk_device *mtk)
 	int OutputThreshold = 128;
 	int DescriptorCountDone = MTK_RING_SIZE - 1;
 	int DescriptorPendingCount = 1;
-	int DescriptorDoneTimeout = 15;
+	int DescriptorDoneTimeout = 3;
 	u32 regVal;
 
 	writel((fRstPacketEngine & 1) |
@@ -347,7 +365,7 @@ void mtk_initialize(struct mtk_device *mtk)
 	regVal = BIT(0) | BIT(1) | BIT(2) | BIT(4);
 	writel(regVal, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
 
-	writel((InputThreshold & GENMASK(10, 0)) |
+	writel(BIT(31) | (InputThreshold & GENMASK(10, 0)) |
 		((OutputThreshold & GENMASK(10, 0)) << 16),
 		mtk->base + EIP93_REG_PE_BUF_THRESH);
 
@@ -373,33 +391,9 @@ static void mtk_desc_free(struct mtk_device *mtk,
 				struct mtk_desc_ring *cdr,
 				struct mtk_desc_ring *rdr)
 {
-	size_t size;
-
 	writel(0, mtk->base + EIP93_REG_PE_RING_CONFIG);
 	writel(0, mtk->base + EIP93_REG_PE_CDR_BASE);
 	writel(0, mtk->base + EIP93_REG_PE_RDR_BASE);
-
-	dma_free_coherent(mtk->dev, cdr->offset, cdr->base, cdr->base_dma);
-
-	dma_free_coherent(mtk->dev, rdr->offset, rdr->base, rdr->base_dma);
-
-	size = MTK_RING_SIZE * sizeof(struct saRecord_s);
-
-	if (mtk->saRecord) {
-		dma_free_coherent(mtk->dev, size, mtk->saRecord,
-				mtk->saRecord_base);
-		mtk->saRecord = NULL;
-		mtk->saRecord_base = 0;
-	}
-
-	size = MTK_RING_SIZE * sizeof(struct saState_s);
-
-	if (mtk->saState) {
-		dma_free_coherent(mtk->dev, size, mtk->saState,
-				mtk->saState_base);
-		mtk->saState = NULL;
-		mtk->saState_base = 0;
-	}
 }
 
 static int mtk_desc_init(struct mtk_device *mtk,
@@ -407,13 +401,13 @@ static int mtk_desc_init(struct mtk_device *mtk,
 			struct mtk_desc_ring *rdr)
 {
 	int RingOffset, RingSize;
-	size_t	size;
 
 	cdr->offset = sizeof(struct eip93_descriptor_s);
-	cdr->base = dma_alloc_coherent(mtk->dev, cdr->offset * MTK_RING_SIZE,
+	cdr->base = dmam_alloc_coherent(mtk->dev, cdr->offset * MTK_RING_SIZE,
 					&cdr->base_dma, GFP_KERNEL);
 	if (!cdr->base)
-		goto err_cleanup;
+		return -ENOMEM;
+
 	cdr->write = cdr->base;
 	cdr->base_end = cdr->base + cdr->offset * (MTK_RING_SIZE - 1);
 	cdr->read  = cdr->base;
@@ -421,10 +415,10 @@ static int mtk_desc_init(struct mtk_device *mtk,
 	dev_dbg(mtk->dev, "CD Ring : %08X\n", cdr->base_dma);
 
 	rdr->offset = sizeof(struct eip93_descriptor_s);
-	rdr->base = dma_alloc_coherent(mtk->dev, rdr->offset * MTK_RING_SIZE,
+	rdr->base = dmam_alloc_coherent(mtk->dev, rdr->offset * MTK_RING_SIZE,
 					&rdr->base_dma, GFP_KERNEL);
 	if (!rdr->base)
-		goto err_cleanup;
+		return -ENOMEM;
 
 	rdr->write = rdr->base;
 	rdr->base_end = rdr->base + rdr->offset * (MTK_RING_SIZE - 1);
@@ -442,34 +436,25 @@ static int mtk_desc_init(struct mtk_device *mtk,
 		(RingSize & GENMASK(10, 0)),
 		mtk->base + EIP93_REG_PE_RING_CONFIG);
 
-	size = MTK_RING_SIZE * sizeof(struct saRecord_s);
+	/* Create Sa and State record DMA pool */
 
-	/* Create SA and State records */
-	size = (MTK_RING_SIZE * sizeof(struct saRecord_s));
+	mtk->saRecord_pool = dmam_pool_create("eip93-saRecord",
+				mtk->dev, sizeof(struct saRecord_s), 32, 0);
 
-	mtk->saRecord = dma_alloc_coherent(mtk->dev, size,
-				&mtk->saRecord_base, GFP_KERNEL);
-
-	if (mtk->saRecord == NULL) {
-		dev_err(mtk->dev, "dma_alloc for saState_prepare failed!!\n");
-		goto err_cleanup;
+	if (!mtk->saRecord_pool) {
+		dev_err(mtk->dev, "Unable to allocate saRecord DMA pool\n");
+		return -ENOMEM;
 	}
 
-	size = (MTK_RING_SIZE * sizeof(struct saState_s));
+	mtk->saState_pool = dmam_pool_create("eip93-saState",
+				mtk->dev, sizeof(struct saState_s), 32, 0);
 
-	mtk->saState = dma_alloc_coherent(mtk->dev, size,
-				&mtk->saState_base, GFP_KERNEL);
-
-	if (mtk->saState == NULL) {
-		dev_err(mtk->dev, "dma_alloc for saState_prepare failed!!\n");
-		goto free_saRecord;
+	if (!mtk->saState_pool) {
+		dev_err(mtk->dev, "Unable to allocate saState DMA pool\n");
+		return -ENOMEM;
 	}
 
 	return 0;
-free_saRecord:
-	mtk_desc_free(mtk, cdr, rdr);
-err_cleanup:
-	return -ENOMEM;
 }
 
 static int mtk_crypto_probe(struct platform_device *pdev)
@@ -509,32 +494,20 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 		dev_err(mtk->dev, "Can't allocate Ring memory\n");
 	}
 
-	mtk->ring[0].dma_buf = devm_kzalloc(mtk->dev,
-		MTK_RING_SIZE * sizeof(struct mtk_desc_buf), GFP_KERNEL);
-
-	if (!mtk->ring[0].dma_buf) {
-		dev_err(mtk->dev, "cant allocate dma_buf memory\n");
-	}
-
-	ret = mtk_desc_init(mtk, &mtk->ring[0].cdr, &mtk->ring[0].rdr);
+	ret = mtk_desc_init(mtk, &mtk->ring->cdr, &mtk->ring->rdr);
 
 	if (ret == -ENOMEM)
 		return -ENOMEM;
 
-	mtk->ring[0].requests = 0;
-	mtk->ring[0].busy = false;
+	mtk->ring->requests = 0;
+	mtk->ring->busy = false;
 
-	spin_lock_init(&mtk->ring[0].lock);
-	spin_lock_init(&mtk->ring[0].desc_lock);
-	spin_lock_init(&mtk->ring[0].rdesc_lock);
-
-
-	mtk->ring[0].work_done.mtk = mtk;
-	INIT_WORK(&mtk->ring[0].work_done.work, mtk_done_work);
-	mtk->ring[0].workdone = create_workqueue("eip93_done");
+	spin_lock_init(&mtk->ring->lock);
+	spin_lock_init(&mtk->ring->read_lock);
+	spin_lock_init(&mtk->ring->write_lock);
 
 	/* Init tasklet for bottom half processing */
-	tasklet_init(&mtk->tasklet, mtk_done_tasklet, (unsigned long)mtk);
+	tasklet_init(&mtk->done, mtk_done_tasklet, (unsigned long)mtk);
 
 	mtk->prng = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->prng), GFP_KERNEL);
 	if (!mtk->prng) {
@@ -543,7 +516,7 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	mtk_initialize(mtk);
 	/* Init. finished, enable RDR interupt */
-	mtk_irq_enable(mtk, BIT(1) | BIT(9));
+	mtk_irq_enable(mtk, BIT(1));
 
 	ret = mtk_prng_init(mtk, true);
 	if (ret)
@@ -570,10 +543,9 @@ static int mtk_crypto_remove(struct platform_device *pdev)
 
 	writel(0, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
 
-	destroy_workqueue(mtk->ring[0].workdone);
-	tasklet_kill(&mtk->tasklet);
+	tasklet_kill(&mtk->done);
 
-	mtk_desc_free(mtk, &mtk->ring[0].cdr, &mtk->ring[0].rdr);
+	mtk_desc_free(mtk, &mtk->ring->cdr, &mtk->ring->rdr);
 	dev_info(mtk->dev, "EIP93 removed.\n");
 
 	return 0;

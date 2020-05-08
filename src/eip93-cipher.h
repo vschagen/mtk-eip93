@@ -57,15 +57,19 @@ struct mtk_cipher_reqctx {
 	unsigned long int	flags;
 	u32		        textsize;
 	u32			ivsize;
+	struct saRecord_s	*saRecord;
+	dma_addr_t		saRecord_base;
+	struct saState_s	*saState;
+	dma_addr_t		saState_base;
 	/* AEAD */
 	u32                     assoclen;
 	u32			authsize;
 	/* copy in case of mis-alignment or AEAD if no-consecutive blocks */
 	struct scatterlist	*sg_src;
 	struct scatterlist	*sg_dst;
-	int			src_nents;
-	int			dst_nents;
 	/* AES-CTR in case of counter overflow */
+	struct saState_s	*saState_ctr;
+	dma_addr_t		saState_base_ctr;
 	struct scatterlist	ctr_src[2];
 	struct scatterlist	ctr_dst[2];
 };

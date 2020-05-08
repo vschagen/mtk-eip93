@@ -16,13 +16,8 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	struct mtk_prng_device *prng = mtk->prng;
 	struct eip93_descriptor_s *cdesc;
 	struct eip93_descriptor_s *rdesc;
-	struct mtk_desc_buf *buf;
 	int cur = prng->cur_buf;
 	int len, mode;
-	int DescriptorCountDone = MTK_RING_SIZE - 1;
-	int DescriptorDoneTimeout = 15;
-	int DescriptorPendingCount = 0;
-	u32 wptr = 0;
 
 	if (reset) {
 		len = 0;
@@ -35,8 +30,8 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	init_completion(&prng->Filled);
 	atomic_set(&prng->State, BUF_EMPTY);
 
-	spin_lock(&mtk->ring[0].desc_lock);
-	cdesc = mtk_add_cdesc(mtk, &wptr);
+	spin_lock(&mtk->ring[0].write_lock);
+	cdesc = mtk_add_cdesc(mtk);
 
 	cdesc->peCrtlStat.bits.hostReady = 1;
 	cdesc->peCrtlStat.bits.prngMode = mode;
@@ -48,26 +43,18 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	cdesc->saAddr = (u32)prng->PRNGSaRecord_dma;
 	cdesc->stateAddr = 0;
 	cdesc->arc4Addr = 0;
-	cdesc->userId = 0;
+	cdesc->userId = MTK_DESC_PRNG | MTK_DESC_LAST | MTK_DESC_FINISH;
 	cdesc->peLength.bits.byPass = 0;
 	cdesc->peLength.bits.length = 4080;
 	cdesc->peLength.bits.hostReady = 1;
 
-	rdesc = mtk_add_rdesc(mtk, &wptr);
-//	wptr = mtk_ring_cdr_index(mtk, cdesc);
-	buf = &mtk->ring[0].dma_buf[wptr];
-	buf->flags = MTK_DESC_PRNG | MTK_DESC_LAST | MTK_DESC_FINISH;
-	spin_unlock(&mtk->ring[0].desc_lock);
+	rdesc = mtk_add_rdesc(mtk);
+	spin_unlock(&mtk->ring[0].write_lock);
 	/*   */
-	spin_lock_bh(&mtk->ring[0].lock);
+	spin_lock(&mtk->ring[0].lock);
 	mtk->ring[0].requests += 1;
 	mtk->ring[0].busy = true;
-	DescriptorPendingCount = min_t(int, mtk->ring[0].requests, 8);
-	writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
-		(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
-		((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
-		mtk->base + EIP93_REG_PE_RING_THRESH);
-	spin_unlock_bh(&mtk->ring[0].lock);
+	spin_unlock(&mtk->ring[0].lock);
 
 	writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
 
