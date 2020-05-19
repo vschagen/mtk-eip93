@@ -28,7 +28,6 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	}
 
 	init_completion(&prng->Filled);
-	atomic_set(&prng->State, BUF_EMPTY);
 
 	spin_lock(&mtk->ring[0].write_lock);
 	cdesc = mtk_add_cdesc(mtk);
@@ -89,6 +88,8 @@ bool mtk_prng_init(struct mtk_device *mtk, bool fLongSA)
 	if (!mtk)
 		return -ENODEV;
 
+	atomic_set(&prng->State, BUF_EMPTY);
+
 	prng->cur_buf = 0;
 	prng->PRNGBuffer[0] = devm_kzalloc(mtk->dev, 4080, GFP_KERNEL);
 	prng->PRNGBuffer_dma[0] = (u32)dma_map_single(mtk->dev,
@@ -136,9 +137,64 @@ void mtk_prng_done(struct mtk_device *mtk, u32 err)
 	/* Buffer refilled, invalidate cache */
 	dma_unmap_single(mtk->dev, prng->PRNGBuffer_dma[cur],
 							4080, DMA_FROM_DEVICE);
-
 	complete(&prng->Filled);
 }
+
+/*
+static int caam_read(struct hwrng *rng, void *data, size_t max, bool wait)
+{
+	struct caam_rng_ctx *ctx = rng_ctx;
+	struct buf_data *bd = &ctx->bufs[ctx->current_buf];
+	int next_buf_idx, copied_idx;
+	int err;
+
+	if (atomic_read(&prng->State)) {
+		// try to submit job if there wasn't one //
+		if (atomic_read(&prng->State) == BUF_EMPTY) {
+			err = submit_job(ctx, 1);
+			// if can't submit job, can't even wait //
+			if (err)
+				return 0;
+		}
+		//no immediate data, so exit if not waiting //
+		if (!wait)
+			return 0;
+
+		// waiting for pending job //
+		if (atomic_read(&prng->State))
+			wait_for_completion(&bd->filled);
+	}
+
+	next_buf_idx = ctx->cur_buf_idx + max;
+	dev_dbg(ctx->jrdev, "%s: start reading at buffer %d, idx %d\n",
+		 __func__, ctx->current_buf, ctx->cur_buf_idx);
+
+	// if enough data in current buffer //
+	if (next_buf_idx < RN_BUF_SIZE) {
+		memcpy(data, bd->buf + ctx->cur_buf_idx, max);
+		ctx->cur_buf_idx = next_buf_idx;
+		return max;
+	}
+
+	// else, copy what's left... //
+	copied_idx = RN_BUF_SIZE - ctx->cur_buf_idx;
+	memcpy(data, bd->buf + ctx->cur_buf_idx, copied_idx);
+	ctx->cur_buf_idx = 0;
+	atomic_set(&bd->empty, BUF_EMPTY);
+
+	// ...refill... /
+	submit_job(ctx, 1);
+
+	// and use next buffer //
+	ctx->current_buf = !ctx->current_buf;
+	dev_dbg(ctx->jrdev, "switched to buffer %d\n", ctx->current_buf);
+
+	// since there already is some data read, don't wait //
+	return copied_idx + caam_read(rng, data + copied_idx,
+				      max - copied_idx, false);
+}
+
+*/
 
 static int get_prng_bytes(char *buf, size_t nbytes, struct mtk_prng_ctx *ctx,
 				int do_cont_test)

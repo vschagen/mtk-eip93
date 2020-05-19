@@ -38,10 +38,10 @@ struct mtk_device {
 struct mtk_prng_device {
 	struct saRecord_s	*PRNGSaRecord;
 	dma_addr_t		PRNGSaRecord_dma;
-	void 			*PRNGBuffer[2];
+	void			*PRNGBuffer[2];
 	dma_addr_t		PRNGBuffer_dma[2];
 	uint32_t		cur_buf;
-	struct completion 	Filled;
+	struct completion	Filled;
 	atomic_t		State;
 };
 
@@ -67,12 +67,6 @@ struct mtk_ring {
 	int				requests;
 	/* The rings is handling at least one request */
 	bool				busy;
-};
-
-struct mtk_context {
-	void (*handle_result)(struct mtk_device *mtk,
-				struct crypto_async_request *req,
-				bool complete,  int err);
 };
 
 enum mtk_alg_type {

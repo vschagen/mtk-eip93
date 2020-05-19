@@ -20,7 +20,7 @@
 #define EIP93_REG_PE_USER_ID		((DESP_BASE)+(0x06 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_LENGTH		((DESP_BASE)+(0x07 * EIP93_REG_WIDTH))
 
-//PACKET ENGINE RING configuartion registers
+/* PACKET ENGINE RING configuartion registers */
 #define PE_RNG_BASE			0x0000080
 
 #define EIP93_REG_PE_CDR_BASE		((PE_RNG_BASE)+(0x00 * EIP93_REG_WIDTH))
@@ -31,7 +31,7 @@
 #define EIP93_REG_PE_RD_COUNT		((PE_RNG_BASE)+(0x05 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_RING_RW_PNTR	((PE_RNG_BASE)+(0x06 * EIP93_REG_WIDTH))
 
-//PACKET ENGINE  configuartion registers
+/* PACKET ENGINE  configuartion registers */
 #define PE_CFG_BASE			0x0000100
 #define EIP93_REG_PE_CONFIG		((PE_CFG_BASE)+(0x00 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_STATUS		((PE_CFG_BASE)+(0x01 * EIP93_REG_WIDTH))
@@ -40,15 +40,15 @@
 #define EIP93_REG_PE_OUTBUF_COUNT	((PE_CFG_BASE)+(0x05 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_BUF_RW_PNTR	((PE_CFG_BASE)+(0x06 * EIP93_REG_WIDTH))
 
-//PACKET ENGINE endian config
+/*PACKET ENGINE endian config */
 #define EN_CFG_BASE			0x00001CC
 #define EIP93_REG_PE_ENDIAN_CONFIG	((EN_CFG_BASE)+(0x00 * EIP93_REG_WIDTH))
 
-//EIP93 CLOCK control registers
+/* EIP93 CLOCK control registers */
 #define CLOCK_BASE			0x01E8
 #define EIP93_REG_PE_CLOCK_CTRL		((CLOCK_BASE)+(0x00 * EIP93_REG_WIDTH))
 
-//EIP93 Device Option and Revision Register
+/* EIP93 Device Option and Revision Register */
 #define REV_BASE			0x01F4
 #define EIP93_REG_PE_OPTION_1		((REV_BASE)+(0x00 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_OPTION_0		((REV_BASE)+(0x01 * EIP93_REG_WIDTH))
@@ -64,14 +64,14 @@
 #define EIP93_REG_MASK_ENABLE		((INT_BASE)+(0X04 * EIP93_REG_WIDTH))
 #define EIP93_REG_MASK_DISABLE		((INT_BASE)+(0X05 * EIP93_REG_WIDTH))
 
-//EIP93 SA Record register
+/* EIP93 SA Record register */
 #define SA_BASE				0x0400
 #define EIP93_REG_SA_CMD_0		((SA_BASE)+(0x00 * EIP93_REG_WIDTH))
 #define EIP93_REG_SA_CMD_1		((SA_BASE)+(0x01 * EIP93_REG_WIDTH))
 
 //#define EIP93_REG_SA_READY		((SA_BASE)+(31 * EIP93_REG_WIDTH))
 
-//State save register
+/* State save register */
 #define STATE_BASE			0x0500
 #define EIP93_REG_STATE_IV_0		((STATE_BASE)+(0x00 * EIP93_REG_WIDTH))
 #define EIP93_REG_STATE_IV_1		((STATE_BASE)+(0x01 * EIP93_REG_WIDTH))
@@ -82,7 +82,7 @@
 #define EIP93_INPUT_BUFFER		0x0800
 #define EIP93_OUTPUT_BUFFER		0x0800
 
-//EIP93 PRNG Configuration Register
+/* EIP93 PRNG Configuration Register */
 #define PRNG_BASE			0x0300
 #define EIP93_REG_PRNG_STAT		((PRNG_BASE)+(0x00 * EIP93_REG_WIDTH))
 #define EIP93_REG_PRNG_CTRL		((PRNG_BASE)+(0x01 * EIP93_REG_WIDTH))

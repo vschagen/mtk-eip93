@@ -25,36 +25,38 @@
 #include "eip93-ring.h"
 #include "eip93-cipher.h"
 #include "eip93-prng.h"
+#include "eip93-ipsec.h"
 
 static struct mtk_alg_template *mtk_algs[] = {
-	&mtk_alg_ecb_des,
-	&mtk_alg_cbc_des,
-	&mtk_alg_ecb_des3_ede,
-	&mtk_alg_cbc_des3_ede,
-	&mtk_alg_ecb_aes,
-	&mtk_alg_cbc_aes,
-	&mtk_alg_ctr_aes,
-	&mtk_alg_rfc3686_aes,
-	&mtk_alg_authenc_hmac_md5_cbc_des,
-	&mtk_alg_authenc_hmac_sha1_cbc_des,
-	&mtk_alg_authenc_hmac_sha224_cbc_des,
-	&mtk_alg_authenc_hmac_sha256_cbc_des,
-	&mtk_alg_authenc_hmac_md5_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_md5_cbc_aes,
+//	&mtk_alg_ecb_des,
+//	&mtk_alg_cbc_des,
+//	&mtk_alg_ecb_des3_ede,
+//	&mtk_alg_cbc_des3_ede,
+//	&mtk_alg_ecb_aes,
+//	&mtk_alg_cbc_aes,
+//	&mtk_alg_ctr_aes,
+//	&mtk_alg_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_md5_cbc_des,
+//	&mtk_alg_authenc_hmac_sha1_cbc_des,
+//	&mtk_alg_authenc_hmac_sha224_cbc_des,
+//	&mtk_alg_authenc_hmac_sha256_cbc_des,
+//	&mtk_alg_authenc_hmac_md5_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_md5_cbc_aes,
 	&mtk_alg_authenc_hmac_sha1_cbc_aes,
-	&mtk_alg_authenc_hmac_sha224_cbc_aes,
-	&mtk_alg_authenc_hmac_sha256_cbc_aes,
-	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
-	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
-	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
-	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
-	&mtk_alg_authenc_hmac_md5_ecb_null,
-	&mtk_alg_authenc_hmac_sha1_ecb_null,
-	&mtk_alg_authenc_hmac_sha224_ecb_null,
-	&mtk_alg_authenc_hmac_sha256_ecb_null,
+//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha256_cbc_aes,
+//	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_md5_ecb_null,
+//	&mtk_alg_authenc_hmac_sha1_ecb_null,
+//	&mtk_alg_authenc_hmac_sha224_ecb_null,
+//	&mtk_alg_authenc_hmac_sha256_ecb_null,
+//	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
 //	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
@@ -166,10 +168,13 @@ inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
 static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 {
 	struct crypto_async_request *async = NULL;
-	struct mtk_context *ctx;
+	struct sk_buff *skb = NULL;
 	struct eip93_descriptor_s *cdesc;
 	struct eip93_descriptor_s *rdesc;
-	int handled = 0, nreq;
+	dma_addr_t srcAddr;
+	int len, padlen;
+	u8 nexthdr;
+	int handled = 0, cnt;
 	int try, ret, err = 0;
 	volatile int done1, done2;
 	bool last_entry = false;
@@ -177,26 +182,31 @@ static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 	u32 flags;
 
 get_more:
+	/* TODO: Rethink logic:
+	 * increase "try" will help openssl benchmark but hurts ipsec
+	 * performance: the idea is to "poll" since ring->busy is true.
+	 * maybe revisite work-queue vs tasklet
+	 */
 	try = 1;
 	while (try--) {
-		nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
-		if (nreq)
+		cnt = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
+		if (cnt)
 			break;
 	}
 
-	if (!nreq)
+	if (!cnt)
 		goto push_request;
 
-	while (nreq) {
+	while (cnt) {
 		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
 		if (IS_ERR(rdesc)) {
-			dev_err(mtk->dev, "Ndesc: %d nreq: %d\n", handled, nreq);
+			dev_dbg(mtk->dev, "Ndesc:%d cnt:%d\n", handled, cnt);
 			ret = -EIO;
 			break;
 		}
 		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring->cdr);
 		if (IS_ERR(cdesc)) {
-			dev_err(mtk->dev, "Cant get Cdesc");
+			dev_dbg(mtk->dev, "Cant get Cdesc");
 			ret = -EIO;
 			break;
 		}
@@ -219,15 +229,14 @@ get_more:
 			dev_err(mtk->dev, "EIP93 try-count: %d", try);
 		*/
 		err = rdesc->peCrtlStat.bits.errStatus;
-		if (err) {
-			dev_err(mtk->dev, "Err: %02x\n", err);
-		}
+		if (err)
+			dev_dbg(mtk->dev, "Err: %02x\n", err);
+
 
 		handled++;
 
 		flags = rdesc->userId;
-		if (flags & MTK_DESC_FINISH)
-			complete = true;
+		complete = (flags & MTK_DESC_FINISH);
 
 		if (flags & MTK_DESC_LAST) {
 			last_entry = true;
@@ -240,11 +249,26 @@ get_more:
 		if (flags & MTK_DESC_PRNG)
 			mtk_prng_done(mtk, err);
 
-		if (flags & MTK_DESC_ASYNC) {
+		if (flags & MTK_DESC_SKCIPHER) {
 			async = (struct crypto_async_request *)rdesc->arc4Addr;
-			ctx = crypto_tfm_ctx(async->tfm);
-			ctx->handle_result(mtk, async, complete, err);
+			mtk_skcipher_handle_result(mtk, async, complete, err);
 		}
+
+		if (flags & MTK_DESC_AEAD) {
+			async = (struct crypto_async_request *)rdesc->arc4Addr;
+			mtk_aead_handle_result(mtk, async, complete, err);
+		}
+
+		if (flags & MTK_DESC_IPSEC) {
+			skb = (struct sk_buff *)rdesc->arc4Addr;
+			srcAddr = (dma_addr_t)rdesc->srcAddr;
+			len = rdesc->peLength.bits.length;
+			padlen = rdesc->peCrtlStat.bits.padCrtlStat;
+			nexthdr = rdesc->peCrtlStat.bits.padValue;
+			mtk_ipsec_handle_result(mtk, skb, srcAddr, nexthdr,
+							len, err);
+		}
+
 	}
 
 	if (handled) {
@@ -492,12 +516,12 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	if (!mtk->ring) {
 		dev_err(mtk->dev, "Can't allocate Ring memory\n");
+		return -ENOMEM;
 	}
 
 	ret = mtk_desc_init(mtk, &mtk->ring->cdr, &mtk->ring->rdr);
-
-	if (ret == -ENOMEM)
-		return -ENOMEM;
+	if (ret)
+		return ret;
 
 	mtk->ring->requests = 0;
 	mtk->ring->busy = false;
@@ -510,9 +534,8 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 	tasklet_init(&mtk->done, mtk_done_tasklet, (unsigned long)mtk);
 
 	mtk->prng = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->prng), GFP_KERNEL);
-	if (!mtk->prng) {
+	if (!mtk->prng)
 		dev_err(mtk->dev, "Can't allocate PRNG memory\n");
-	}
 
 	mtk_initialize(mtk);
 	/* Init. finished, enable RDR interupt */
@@ -526,6 +549,8 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	ret = mtk_register_algs(mtk);
 
+	ret = mtk_protocol_register(mtk);
+
 	dev_info(mtk->dev, "EIP93 initialized succesfull\n");
 
 	return 0;
@@ -534,6 +559,8 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 static int mtk_crypto_remove(struct platform_device *pdev)
 {
 	struct mtk_device *mtk = platform_get_drvdata(pdev);
+
+	mtk_protocol_deregister(mtk);
 
 	mtk_unregister_algs(mtk, ARRAY_SIZE(mtk_algs));
 
