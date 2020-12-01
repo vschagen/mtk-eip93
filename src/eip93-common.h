@@ -10,21 +10,20 @@
 
 #include <linux/bits.h>
 
-/* key size in bytes */
-#define MTK_SHA_HMAC_KEY_SIZE		64
-#define MTK_MAX_CIPHER_KEY_SIZE		AES_KEYSIZE_256
+#define MTK_RING_SIZE			256
+#define MTK_RING_BUSY			224
+#define NUM_AES_BYPASS			0
+#define MTK_QUEUE_LENGTH		128
+#define MTK_CRA_PRIORITY		1500
 
-/* IV length in bytes */
-#define MTK_AES_IV_LENGTH		AES_BLOCK_SIZE
-/* max of AES_BLOCK_SIZE, DES3_EDE_BLOCK_SIZE */
-#define MTK_MAX_IV_SIZE			AES_BLOCK_SIZE
-
-/* maximum nonce bytes  */
-#define MTK_MAX_NONCE			16
-#define MTK_MAX_NONCE_WORDS		(MTK_MAX_NONCE / sizeof(u32))
-
-/* burst size alignment requirement */
-#define MTK_MAX_ALIGN_SIZE		64
+#define MTK_DESC_ASYNC			BIT(0)
+#define MTK_DESC_SKCIPHER		BIT(1)
+#define MTK_DESC_AEAD			BIT(2)
+#define MTK_DESC_AHASH			BIT(3)
+#define MTK_DESC_PRNG			BIT(4)
+#define MTK_DESC_FAKE_HMAC		BIT(5)
+#define MTK_DESC_LAST			BIT(6)
+#define MTK_DESC_FINISH			BIT(7)
 
 /* cipher algorithms */
 #define MTK_ALG_DES			BIT(0)
@@ -81,27 +80,6 @@
 						MTK_HASH_SHA1 ||   \
 						MTK_HASH_SHA224 || \
 						MTK_HASH_SHA256))
-
-#define HASH_DIGEST_OUT			0
-#define HASH_DIGEST_IN			1
-#define CRYPTO_ENCRYPTION		1
-#define CRYPTO_DECRYPTION		2
-
-#define MTK_RING_SIZE			256
-#define MTK_RING_BUSY			224
-#define NUM_AES_BYPASS			0
-#define MTK_QUEUE_LENGTH		128
-#define MTK_CRA_PRIORITY		1500
-
-
-#define MTK_DESC_ASYNC			BIT(0)
-#define MTK_DESC_SKCIPHER		BIT(1)
-#define MTK_DESC_AEAD			BIT(2)
-#define MTK_DESC_AHASH			BIT(3)
-#define MTK_DESC_PRNG			BIT(4)
-#define MTK_DESC_FAKE_HMAC		BIT(5)
-#define MTK_DESC_LAST			BIT(6)
-#define MTK_DESC_FINISH			BIT(7)
 
 /*
  * Interrupts of EIP93
