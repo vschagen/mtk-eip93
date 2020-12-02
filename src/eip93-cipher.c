@@ -20,6 +20,7 @@
 
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
+#include <linux/moduleparam.h>
 #include <linux/scatterlist.h>
 #include <linux/types.h>
 
@@ -28,6 +29,13 @@
 #include "eip93-cipher.h"
 #include "eip93-regs.h"
 #include "eip93-ring.h"
+
+static unsigned int aes_sw = NUM_AES_BYPASS;
+module_param(aes_sw, uint, 0644);
+MODULE_PARM_DESC(aes_sw,
+		 "Only use hardware for AES requests larger than this "
+		 "[0=always use hardware; default="
+		 __stringify(NUM_AES_BYPASS)"]");
 
 inline void mtk_free_sg_cpy(const int len, struct scatterlist **sg)
 {
@@ -274,7 +282,7 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 		cdesc->dstAddr = dstAddr;
 		cdesc->saAddr = saRecord_base;
 		cdesc->stateAddr = saState_base;
-		cdesc->arc4Addr = areq;
+		cdesc->arc4Addr = (u32)areq;
 		cdesc->userId = MTK_DESC_ASYNC;
 		cdesc->peLength.bits.byPass = 0;
 		cdesc->peLength.bits.length = len;
@@ -503,8 +511,6 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			esph = sg_virt(rctx->sg_src);
 			saRecord->saSpi =  ntohl(esph[0]);
                         saRecord->saSeqNum[0] = ntohl(esph[1]);
-//			saRecord->saSeqNum[0] = ntohl(iv[2]);
-//			saRecord->saSeqNum[1] = ntohl(iv[3]);
 			offsetin = rctx->assoclen + rctx->ivsize;
 			saRecord->saCmd1.bits.copyHeader = 0;
 			saRecord->saCmd0.bits.hdrProc = 1;
@@ -688,14 +694,14 @@ static int mtk_skcipher_cra_init(struct crypto_tfm *tfm)
 
         ctx->fallback = NULL;
 
-        if (IS_AES(tmpl->flags))
-                ctx->fallback = crypto_alloc_skcipher(crypto_tfm_alg_name(tfm), 0,
+        if (IS_AES(tmpl->flags)) {
+                 ctx->fallback = crypto_alloc_skcipher(crypto_tfm_alg_name(tfm), 0,
         				CRYPTO_ALG_NEED_FALLBACK);
                 if (IS_ERR(ctx->fallback))
         	       ctx->fallback = NULL;
+        }
 
-
-        if (IS_AES(tmpl->flags) && ctx->fallback)
+        if (IS_AES(tmpl->flags) && (ctx->fallback))
                 crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
                                         sizeof(struct mtk_cipher_reqctx) +
                                         crypto_skcipher_reqsize(ctx->fallback));
@@ -792,7 +798,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	if (!req->cryptlen)
 		return 0;
 
-	if ((req->cryptlen <= NUM_AES_BYPASS) && (ctx->fallback)) {
+	if ((req->cryptlen <= aes_sw) && (ctx->fallback)) {
 		skcipher_request_set_tfm(&rctx->fallback_req, ctx->fallback);
 		skcipher_request_set_callback(&rctx->fallback_req,
                                         req->base.flags,
