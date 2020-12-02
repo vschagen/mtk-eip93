@@ -317,7 +317,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	bool overflow;
 	bool complete = true;
 	bool src_align = true, dst_align = true;
-	u32 iv[AES_BLOCK_SIZE / sizeof(u32)], *spi;
+	u32 iv[AES_BLOCK_SIZE / sizeof(u32)], *esph;
 	int blksize = 1, offsetin = 0;
 	unsigned long irqflags;
 
@@ -398,6 +398,14 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			dst_align = mtk_is_sg_aligned(reqdst, totlen_dst, blksize);
 	}
 
+        overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
+
+        /* work around for gcm(ctr-eip93) */
+        if (overflow) {
+                        src_align = false;
+                        dst_align = false;
+        }
+
 	if (!src_align) {
 		err = mtk_make_sg_cpy(mtk, rctx->sg_src, &rctx->sg_src,
 					totlen_src, rctx, true);
@@ -419,8 +427,6 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		memcpy(iv, reqiv, AES_BLOCK_SIZE);
 	}
 	rctx->saState_ctr = NULL;
-
-	overflow = (IS_CTR(rctx->flags)  && (!IS_RFC3686(rctx->flags)));
 
 	if (overflow) {
 		/* Compute data length. */
@@ -494,10 +500,11 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			/* seems EIP93 needs to process the header itself
 			 * So get the spi and sequence number from orginal
 			 * header for now */
-			spi = sg_virt(rctx->sg_src);
-			saRecord->saSpi =  ntohl(spi[0]);
-			saRecord->saSeqNum[0] = ntohl(iv[2]);
-			saRecord->saSeqNum[1] = ntohl(iv[3]);
+			esph = sg_virt(rctx->sg_src);
+			saRecord->saSpi =  ntohl(esph[0]);
+                        saRecord->saSeqNum[0] = ntohl(esph[1]);
+//			saRecord->saSeqNum[0] = ntohl(iv[2]);
+//			saRecord->saSeqNum[1] = ntohl(iv[3]);
 			offsetin = rctx->assoclen + rctx->ivsize;
 			saRecord->saCmd1.bits.copyHeader = 0;
 			saRecord->saCmd0.bits.hdrProc = 1;
