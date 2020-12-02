@@ -39,7 +39,11 @@ extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_ecb_null;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ecb_null;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ecb_null;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null;
+extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes;
 extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes;
+extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes;
+extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes;
+
 
 struct mtk_cipher_ctx {
 	struct mtk_context	base;

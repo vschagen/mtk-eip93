@@ -55,7 +55,10 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_ecb_null,
 	&mtk_alg_authenc_hmac_sha224_ecb_null,
 	&mtk_alg_authenc_hmac_sha256_ecb_null,
-//	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
+	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
+	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
+	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
+	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
 };

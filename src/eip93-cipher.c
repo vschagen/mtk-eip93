@@ -1781,8 +1781,8 @@ struct mtk_alg_template mtk_alg_authenc_hmac_md5_ecb_null = {
 		.maxauthsize = MD5_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(md5),ecb(cipher_null))",
-			.cra_driver_name = "eip93-authenc-hmac-md5-"
-						"ecb-cipher-null",
+			.cra_driver_name = "authenc(hmac(md5-eip93),"
+						"ecb(cipher_null)",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
@@ -1808,8 +1808,8 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ecb_null = {
 		.maxauthsize = SHA1_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha1),ecb(cipher_null))",
-			.cra_driver_name = "eip93-authenc-hmac-sha1-"
-						"ecb-cipher-null",
+			.cra_driver_name = "authenc(hmac(sha1-eip93),"
+						"ecb(cipher_null)",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
@@ -1835,8 +1835,8 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ecb_null = {
 		.maxauthsize = SHA224_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha224),ecb(cipher_null))",
-			.cra_driver_name = "eip93-authenc-hmac-sha224-"
-						"ecb-cipher-null",
+			.cra_driver_name = "authenc(hmac(sha224-eip93),"
+						"ecb(cipher_null)",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
@@ -1862,14 +1862,42 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null = {
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
 			.cra_name = "authenc(hmac(sha256),ecb(cipher_null))",
-			.cra_driver_name = "eip93-authenc-hmac-sha256-"
-						"ecb-cipher-null",
+			.cra_driver_name = "authenc(hmac(sha256-eip93),"
+						"ecb(cipher_null)",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = NULL_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
 			.cra_alignmask = 0x0,
+			.cra_init = mtk_aead_cra_init,
+			.cra_exit = mtk_aead_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+
+struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes = {
+	.type = MTK_ALG_TYPE_AEAD,
+	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_MODE_CBC |
+			MTK_ALG_AES | MTK_GENIV,
+	.alg.aead = {
+		.setkey = mtk_aead_setkey,
+		.encrypt = mtk_aead_encrypt,
+		.decrypt = mtk_aead_decrypt,
+		.ivsize	= AES_BLOCK_SIZE,
+		.setauthsize = mtk_aead_setauthsize,
+		.maxauthsize = SHA1_DIGEST_SIZE,
+		.base = {
+			.cra_name = "echainiv(authenc(hmac(sha1),cbc(aes)))",
+			.cra_driver_name = "echainiv(authenc(hmac(sha1-eip93)"
+                                        ",cbc(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = AES_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
+			.cra_alignmask = 0,
 			.cra_init = mtk_aead_cra_init,
 			.cra_exit = mtk_aead_cra_exit,
 			.cra_module = THIS_MODULE,
@@ -1890,7 +1918,64 @@ struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes = {
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
 			.cra_name = "echainiv(authenc(hmac(sha256),cbc(aes)))",
-			.cra_driver_name = "eip93-echainiv-authenc-hmac-sha256-cbc-aes",
+			.cra_driver_name = "echainiv(authenc(hmac(sha256-eip93)"
+                                ",cbc(aes-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = AES_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
+			.cra_alignmask = 0,
+			.cra_init = mtk_aead_cra_init,
+			.cra_exit = mtk_aead_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+
+struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes = {
+	.type = MTK_ALG_TYPE_AEAD,
+	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_ALG_AES |
+			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_GENIV,
+	.alg.aead = {
+		.setkey = mtk_aead_setkey,
+		.encrypt = mtk_aead_encrypt,
+		.decrypt = mtk_aead_decrypt,
+		.ivsize	= CTR_RFC3686_IV_SIZE,
+		.setauthsize = mtk_aead_setauthsize,
+		.maxauthsize = SHA1_DIGEST_SIZE,
+		.base = {
+			.cra_name = "seqiv(authenc(hmac(sha1),rfc3686(ctr(aes)))",
+			.cra_driver_name = "seqiv(authenc(hmac(sha1-eip93),"
+                                "rfc3686(ctr(aes-eip93)))",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = AES_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
+			.cra_alignmask = 0,
+			.cra_init = mtk_aead_cra_init,
+			.cra_exit = mtk_aead_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+
+struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes = {
+	.type = MTK_ALG_TYPE_AEAD,
+	.flags = MTK_HASH_HMAC | MTK_HASH_SHA256 | MTK_ALG_AES |
+			MTK_MODE_CTR | MTK_MODE_RFC3686 | MTK_GENIV,
+	.alg.aead = {
+		.setkey = mtk_aead_setkey,
+		.encrypt = mtk_aead_encrypt,
+		.decrypt = mtk_aead_decrypt,
+		.ivsize	= CTR_RFC3686_IV_SIZE,
+		.setauthsize = mtk_aead_setauthsize,
+		.maxauthsize = SHA256_DIGEST_SIZE,
+		.base = {
+			.cra_name = "seqiv(authenc(hmac(sha256),rfc3686(ctr(aes)))",
+			.cra_driver_name = "seqiv(authenc(hmac(sha256-eip93),"
+                                "rfc3686(ctr(aes-eip93)))",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
