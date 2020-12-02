@@ -26,7 +26,19 @@ Authentication:
 * authenc(hmac(md5/sha1/224/256, des / 3des - cbc)
 * authenc(hmac(sha1/sha256), cbc / rfc3686(ctr) - aes) with 128/192/256 keysize
 
-Testing has been done on Linux Kernel v5.4.39 with all the extended tests enabled.
+IPSec templates:
+* echainiv(AEAD..)
+* seqiv(AEAD..)
+
+These templetes use the internal PRNG as IV for outbound SA's
+
+Testing has been done on Linux Kernel v5.4.80 with all the extended tests enabled.
+
+Additional "aes_sw" parameter can be passed on loading or changed in /sys/module/
+This is the maximum crypto length to use software as fallback. Standard this is set to 256.
+This will improve performance for small(er) blocks. "0" means no software fallback
+the driver will handle all in hardware. A large number, like 1000000 means the 
+hardware will never be used and the driver will pass all request to software.
 
 TODO:
 finish the ansi prng implementation. To be able to seed the PRNG from userspace
