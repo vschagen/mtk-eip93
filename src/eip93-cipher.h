@@ -46,38 +46,37 @@ extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes;
 
 
 struct mtk_cipher_ctx {
-	struct mtk_context	base;
-	struct mtk_device	*mtk;
-	struct saRecord_s	*sa;
+	struct mtk_context		base;
+	struct mtk_device		*mtk;
+	struct saRecord_s		*sa;
 
 	/* AEAD specific */
-	unsigned int		authsize;
-	struct crypto_shash	*shash; /* TODO change to ahash */
-	bool			aead;
-        /* fallback for hardware bypass only */
-        struct crypto_skcipher *fallback;
+	unsigned int			authsize;
+	struct crypto_shash		*shash;
+	bool				aead;
+	struct crypto_skcipher		*fallback;
 };
 
 struct mtk_cipher_reqctx {
-	unsigned long int	flags;
-	u32		        textsize;
-	u32			ivsize;
-	struct saRecord_s	*saRecord;
-	dma_addr_t		saRecord_base;
-	struct saState_s	*saState;
-	dma_addr_t		saState_base;
+	unsigned long			flags;
+	u32				textsize;
+	u32				ivsize;
+	struct saRecord_s		*saRecord;
+	dma_addr_t			saRecord_base;
+	struct saState_s		*saState;
+	dma_addr_t			saState_base;
 	/* AEAD */
-	u32                     assoclen;
-	u32			authsize;
+	u32				assoclen;
+	u32				authsize;
 	/* copy in case of mis-alignment or AEAD if no-consecutive blocks */
-	struct scatterlist	*sg_src;
-	struct scatterlist	*sg_dst;
+	struct scatterlist		*sg_src;
+	struct scatterlist		*sg_dst;
 	/* AES-CTR in case of counter overflow */
-	struct saState_s	*saState_ctr;
-	dma_addr_t		saState_base_ctr;
-	struct scatterlist	ctr_src[2];
-	struct scatterlist	ctr_dst[2];
-        /* request fallback, keep at the end */
-        struct skcipher_request fallback_req;
+	struct saState_s		*saState_ctr;
+	dma_addr_t			saState_base_ctr;
+	struct scatterlist		ctr_src[2];
+	struct scatterlist		ctr_dst[2];
+	/* request fallback, keep at the end */
+	struct skcipher_request		fallback_req;
 };
 #endif /* _CIPHER_H_ */

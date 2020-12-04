@@ -27,38 +27,38 @@
 #include "eip93-prng.h"
 
 static struct mtk_alg_template *mtk_algs[] = {
-	&mtk_alg_ecb_des,
-	&mtk_alg_cbc_des,
-	&mtk_alg_ecb_des3_ede,
-	&mtk_alg_cbc_des3_ede,
-	&mtk_alg_ecb_aes,
-	&mtk_alg_cbc_aes,
+//	&mtk_alg_ecb_des,
+//	&mtk_alg_cbc_des,
+//	&mtk_alg_ecb_des3_ede,
+//	&mtk_alg_cbc_des3_ede,
+//	&mtk_alg_ecb_aes,
+//	&mtk_alg_cbc_aes,
 	&mtk_alg_ctr_aes,
-	&mtk_alg_rfc3686_aes,
-	&mtk_alg_authenc_hmac_md5_cbc_des,
-	&mtk_alg_authenc_hmac_sha1_cbc_des,
-	&mtk_alg_authenc_hmac_sha224_cbc_des,
-	&mtk_alg_authenc_hmac_sha256_cbc_des,
-	&mtk_alg_authenc_hmac_md5_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
-	&mtk_alg_authenc_hmac_md5_cbc_aes,
-	&mtk_alg_authenc_hmac_sha1_cbc_aes,
-	&mtk_alg_authenc_hmac_sha224_cbc_aes,
-	&mtk_alg_authenc_hmac_sha256_cbc_aes,
-	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
-	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
-	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
-	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
-	&mtk_alg_authenc_hmac_md5_ecb_null,
-	&mtk_alg_authenc_hmac_sha1_ecb_null,
-	&mtk_alg_authenc_hmac_sha224_ecb_null,
-	&mtk_alg_authenc_hmac_sha256_ecb_null,
-	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
-	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
-	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
-	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
+//	&mtk_alg_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_md5_cbc_des,
+//	&mtk_alg_authenc_hmac_sha1_cbc_des,
+//	&mtk_alg_authenc_hmac_sha224_cbc_des,
+//	&mtk_alg_authenc_hmac_sha256_cbc_des,
+//	&mtk_alg_authenc_hmac_md5_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
+//	&mtk_alg_authenc_hmac_md5_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha1_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+//	&mtk_alg_authenc_hmac_sha256_cbc_aes,
+//	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
+//	&mtk_alg_authenc_hmac_md5_ecb_null,
+//	&mtk_alg_authenc_hmac_sha1_ecb_null,
+//	&mtk_alg_authenc_hmac_sha224_ecb_null,
+//	&mtk_alg_authenc_hmac_sha256_ecb_null,
+//	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
+//	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
+//	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
+//	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
 };
@@ -228,7 +228,7 @@ get_more:
 			last_entry = true;
 			break;
 		}
-                nreq--;
+		nreq--;
 	}
 
 	if (last_entry) {
@@ -267,7 +267,6 @@ push_request:
 
 queue_done:
 	mtk_irq_enable(mtk, BIT(1));
-	return;
 }
 
 static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
@@ -307,7 +306,7 @@ void mtk_initialize(struct mtk_device *mtk)
 	uint8_t fResetRing = 1;
 	uint8_t PE_Mode = 3;
 	uint8_t fBO_PD_en = 0;
-	uint8_t fBO_SA_en = 0 ;
+	uint8_t fBO_SA_en = 0;
 	uint8_t fBO_Data_en = 0;
 	uint8_t fBO_TD_en = 0;
 	uint8_t fEnablePDRUpdate = 1;
@@ -495,6 +494,12 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 	if (ret == -ENOMEM)
 		return -ENOMEM;
 
+	mtk->prng = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->prng), GFP_KERNEL);
+	if (!mtk->prng) {
+		dev_err(mtk->dev, "Can't allocate PRNG memory\n");
+		return -ENOMEM;
+	}
+
 	mtk->ring->requests = 0;
 	mtk->ring->busy = false;
 
@@ -504,11 +509,6 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	/* Init tasklet for bottom half processing */
 	tasklet_init(&mtk->done, mtk_done_tasklet, (unsigned long)mtk);
-
-	mtk->prng = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->prng), GFP_KERNEL);
-	if (!mtk->prng) {
-		dev_err(mtk->dev, "Can't allocate PRNG memory\n");
-	}
 
 	mtk_initialize(mtk);
 	/* Init. finished, enable RDR interupt */

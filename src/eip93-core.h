@@ -38,10 +38,10 @@ struct mtk_device {
 struct mtk_prng_device {
 	struct saRecord_s	*PRNGSaRecord;
 	dma_addr_t		PRNGSaRecord_dma;
-	void 			*PRNGBuffer[2];
+	void			*PRNGBuffer[2];
 	dma_addr_t		PRNGBuffer_dma[2];
 	uint32_t		cur_buf;
-	struct completion 	Filled;
+	struct completion	Filled;
 	atomic_t		State;
 };
 

@@ -90,7 +90,7 @@ inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len, const int blksz)
 		 * size we need bounce buffers. The DMA-API requires that the
 		 * entire line is owned by the DMA buffer.
 		 */
-		 if (!IS_ALIGNED(sg->offset, 4))
+		if (!IS_ALIGNED(sg->offset, 4))
 			return false;
 
 		/* segments need to be blocksize aligned */
@@ -111,14 +111,14 @@ inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len, const int blksz)
 
 inline void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 				const u32 nonce, const unsigned int keylen,
-				const unsigned long int flags)
+				const unsigned long flags)
 {
 	struct saRecord_s *saRecord;
 
 	saRecord = ctx->sa;
 
 	saRecord->saCmd0.bits.ivSource = 2;
-	saRecord->saCmd0.bits.saveIv = 1 ;
+	saRecord->saCmd0.bits.saveIv = 1;
 	saRecord->saCmd0.bits.opGroup = 0;
 	saRecord->saCmd0.bits.opCode = 0;
 
@@ -292,8 +292,8 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 		n -= len;
 	} while (n);
 
-	 if (complete == true) {
-	 	cdesc->userId |= MTK_DESC_LAST;
+	if (complete == true) {
+		cdesc->userId |= MTK_DESC_LAST;
 		cdesc->userId |= MTK_DESC_FINISH;
 	}
 
@@ -321,7 +321,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	struct saState_s *saState;
 	dma_addr_t saState_base, saRecord_base;
 	u32 start, end, ctr, blocks;
-	unsigned long int flags = rctx->flags;
+	unsigned long flags = rctx->flags;
 	bool overflow;
 	bool complete = true;
 	bool src_align = true, dst_align = true;
@@ -353,13 +353,11 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	rctx->sg_dst = reqdst;
 	dst = reqdst;
 
-	if (ctx->aead) {
-		if (IS_ENCRYPT(flags)) {
+	if (ctx->aead)
+		if (IS_ENCRYPT(flags))
 			totlen_dst += authsize;
-		} else {
+		else
 			totlen_src += authsize;
-		}
-	}
 
 	src_nents = sg_nents_for_len(src, totlen_src);
 	dst_nents = sg_nents_for_len(dst, totlen_dst);
@@ -395,8 +393,8 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			else
 				dst_align = mtk_is_sg_aligned(reqdst, totlen_dst, blksize);
 		} else {
-		src_align = false;
-		dst_align = false;
+			src_align = false;
+			dst_align = false;
 		}
 	} else {
 		src_align = mtk_is_sg_aligned(src, totlen_src, blksize);
@@ -406,13 +404,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			dst_align = mtk_is_sg_aligned(reqdst, totlen_dst, blksize);
 	}
 
-        overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
-
-        /* work around for gcm(ctr-eip93) */
-        if (overflow) {
-                        src_align = false;
-                        dst_align = false;
-        }
+	overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
 
 	if (!src_align) {
 		err = mtk_make_sg_cpy(mtk, rctx->sg_src, &rctx->sg_src,
@@ -431,9 +423,9 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		dst = rctx->sg_dst;
 	}
 
-	if (IS_CBC(flags) || IS_CTR(flags)) {
+	if (IS_CBC(flags) || IS_CTR(flags))
 		memcpy(iv, reqiv, AES_BLOCK_SIZE);
-	}
+
 	rctx->saState_ctr = NULL;
 
 	if (overflow) {
@@ -446,36 +438,35 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		if (end < start) {
 			offset = AES_BLOCK_SIZE * -start;
 			/*
-		 	* Increment the counter manually to cope with
-		 	* the hardware counter overflow.
-		 	*/
+			 * Increment the counter manually to cope with
+			 * the hardware counter overflow.
+			 */
 			iv[3] = 0xffffffff;
 			crypto_inc((u8 *)iv, AES_BLOCK_SIZE);
 			complete = false;
 			rctx->saState_ctr = dma_pool_zalloc(mtk->saState_pool,
 				GFP_KERNEL, &rctx->saState_base_ctr);
 			if (!rctx->saState_ctr)
-				dev_err(mtk->dev,"No saState_ctr DMA memory\n");
+				dev_err(mtk->dev, "No saState_ctr DMA memory\n");
 		}
 	}
-
 	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
 	 * implies __dma_cache_wback_inv
 	 */
 	dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
+
 	if (src != dst)
 		dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
-
 
 	rctx->saState = dma_pool_zalloc(mtk->saState_pool, GFP_KERNEL,
 					&rctx->saState_base);
 	if (!rctx->saState)
-		dev_err(mtk->dev,"No saState DMA memory\n");
+		dev_err(mtk->dev, "No saState DMA memory\n");
 
 	rctx->saRecord = dma_pool_zalloc(mtk->saRecord_pool, GFP_KERNEL,
 					&rctx->saRecord_base);
 	if (!rctx->saRecord)
-		dev_err(mtk->dev,"No saRecord DMA memory\n");
+		dev_err(mtk->dev, "No saRecord DMA memory\n");
 
 	saState = rctx->saState;
 	saState_base = rctx->saState_base;
@@ -490,7 +481,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	if (IS_HMAC(flags)) {
 		saRecord->saCmd1.bits.byteOffset = 0;
 		saRecord->saCmd1.bits.hashCryptOffset = (aad / 4);
-		saRecord->saCmd0.bits.digestLength = (authsize /4);
+		saRecord->saCmd0.bits.digestLength = (authsize / 4);
 	}
 
 	if (ctx->aead) {
@@ -499,7 +490,7 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			saRecord->saCmd1.bits.copyDigest = 0;
 	}
 
-	if IS_GENIV(flags) {
+	if (IS_GENIV(flags)) {
 		saRecord->saCmd0.bits.opCode = 0;
 		saRecord->saCmd0.bits.opGroup = 1;
 
@@ -507,10 +498,11 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			datalen = rctx->textsize - rctx->ivsize;
 			/* seems EIP93 needs to process the header itself
 			 * So get the spi and sequence number from orginal
-			 * header for now */
+			 * header for now
+			 */
 			esph = sg_virt(rctx->sg_src);
 			saRecord->saSpi =  ntohl(esph[0]);
-                        saRecord->saSeqNum[0] = ntohl(esph[1]);
+			saRecord->saSeqNum[0] = ntohl(esph[1]);
 			offsetin = rctx->assoclen + rctx->ivsize;
 			saRecord->saCmd1.bits.copyHeader = 0;
 			saRecord->saCmd0.bits.hdrProc = 1;
@@ -580,9 +572,9 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	u32 *otag;
 	int i;
 
-	if (rctx->sg_src == rctx->sg_dst ) {
-		dma_unmap_sg(mtk->dev, reqdst, sg_nents(rctx->sg_dst),
-							DMA_BIDIRECTIONAL);
+	if (rctx->sg_src == rctx->sg_dst) {
+		dma_unmap_sg(mtk->dev, rctx->sg_dst, sg_nents(rctx->sg_dst),
+							DMA_FROM_DEVICE);
 		goto process_tag;
 	}
 
@@ -611,8 +603,6 @@ process_tag:
 				sg_virt(rctx->sg_dst), len + rctx->authsize);
 		mtk_free_sg_cpy(len + rctx->authsize, &rctx->sg_dst);
 	}
-
-	return;
 }
 
 void mtk_handle_result(struct mtk_device *mtk,
@@ -630,9 +620,8 @@ void mtk_handle_result(struct mtk_device *mtk,
 		local_bh_enable();
 	}
 
-	if (!complete) {
+	if (!complete)
 		return;
-	}
 
 	if ((!IS_RFC3686(rctx->flags)) &&
 		(IS_CBC(rctx->flags) || IS_CTR(rctx->flags))) {
@@ -655,8 +644,6 @@ void mtk_handle_result(struct mtk_device *mtk,
 	local_bh_disable();
 	async->complete(async, err);
 	local_bh_enable();
-
-	return;
 }
 
 void mtk_skcipher_handle_result(struct mtk_device *mtk,
@@ -668,7 +655,6 @@ void mtk_skcipher_handle_result(struct mtk_device *mtk,
 
 	mtk_handle_result(mtk, async, rctx, req->src, req->dst, req->iv,
 				complete, err);
-	return;
 }
 
 void mtk_aead_handle_result(struct mtk_device *mtk,
@@ -680,7 +666,6 @@ void mtk_aead_handle_result(struct mtk_device *mtk,
 
 	mtk_handle_result(mtk, async, rctx, req->src, req->dst, req->iv,
 				complete, err);
-	return;
 }
 
 /* Crypto skcipher API functions */
@@ -692,22 +677,22 @@ static int mtk_skcipher_cra_init(struct crypto_tfm *tfm)
 
 	memset(ctx, 0, sizeof(*ctx));
 
-        ctx->fallback = NULL;
+	ctx->fallback = NULL;
 
-        if (IS_AES(tmpl->flags)) {
-                 ctx->fallback = crypto_alloc_skcipher(crypto_tfm_alg_name(tfm), 0,
-        				CRYPTO_ALG_NEED_FALLBACK);
-                if (IS_ERR(ctx->fallback))
-        	       ctx->fallback = NULL;
-        }
+	if (IS_AES(tmpl->flags)) {
+		ctx->fallback = crypto_alloc_skcipher(crypto_tfm_alg_name(tfm),
+				0, CRYPTO_ALG_NEED_FALLBACK);
+		if (IS_ERR(ctx->fallback))
+			ctx->fallback = NULL;
+	}
 
-        if (IS_AES(tmpl->flags) && (ctx->fallback))
-                crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
-                                        sizeof(struct mtk_cipher_reqctx) +
-                                        crypto_skcipher_reqsize(ctx->fallback));
-        else
-                crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
-                        offsetof(struct mtk_cipher_reqctx, fallback_req));
+	if (IS_AES(tmpl->flags) && (ctx->fallback))
+		crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
+					sizeof(struct mtk_cipher_reqctx) +
+					crypto_skcipher_reqsize(ctx->fallback));
+	else
+		crypto_skcipher_set_reqsize(__crypto_skcipher_cast(tfm),
+			offsetof(struct mtk_cipher_reqctx, fallback_req));
 
 	ctx->mtk = tmpl->mtk;
 	ctx->base.handle_result = mtk_skcipher_handle_result;
@@ -736,7 +721,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.skcipher.base);
-	unsigned long int flags = tmpl->flags;
+	unsigned long flags = tmpl->flags;
 	struct crypto_aes_ctx aes;
 	unsigned int keylen = len;
 	u32 nonce = 0;
@@ -776,7 +761,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	if (ctx->fallback) {
 		ret = crypto_skcipher_setkey(ctx->fallback, key, len);
 		if (ret)
-                        return ret;
+			return ret;
 	}
 
 	return 0;
@@ -801,11 +786,11 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	if ((req->cryptlen <= aes_sw) && (ctx->fallback)) {
 		skcipher_request_set_tfm(&rctx->fallback_req, ctx->fallback);
 		skcipher_request_set_callback(&rctx->fallback_req,
-                                        req->base.flags,
+					req->base.flags,
 					req->base.complete,
-                                        req->base.data);
+					req->base.data);
 		skcipher_request_set_crypt(&rctx->fallback_req, req->src,
-                                        req->dst, req->cryptlen, req->iv);
+					req->dst, req->cryptlen, req->iv);
 		if (IS_ENCRYPT(rctx->flags))
 			ret = crypto_skcipher_encrypt(&rctx->fallback_req);
 		else
@@ -814,7 +799,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 		return ret;
 	}
 
-        rctx->textsize = req->cryptlen;
+	rctx->textsize = req->cryptlen;
 	rctx->authsize = 0;
 	rctx->assoclen = 0;
 	rctx->ivsize = ivsize;
@@ -833,7 +818,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	if (ret == 0)
 		return 0;
 
-        spin_lock_bh(&mtk->ring->lock);
+	spin_lock_bh(&mtk->ring->lock);
 	mtk->ring->requests += ret;
 
 	if (!mtk->ring->busy) {
@@ -844,13 +829,13 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 			mtk->base + EIP93_REG_PE_RING_THRESH);
 		mtk->ring->busy = true;
 	}
-        spin_unlock_bh(&mtk->ring->lock);
+	spin_unlock_bh(&mtk->ring->lock);
 	/* Writing new descriptor count starts DMA action */
 	writel(ret, mtk->base + EIP93_REG_PE_CD_COUNT);
 
 	if (mtk->ring->requests > MTK_RING_BUSY) {
 		rctx->flags |= MTK_BUSY;
-                return -EBUSY;
+		return -EBUSY;
 	}
 
 	return -EINPROGRESS;
@@ -887,7 +872,7 @@ static int mtk_aead_cra_init(struct crypto_tfm *tfm)
 	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.aead.base);
-	unsigned long int flags = tmpl->flags;
+	unsigned long flags = tmpl->flags;
 	char *alg_base;
 
 	memset(ctx, 0, sizeof(*ctx));
@@ -942,7 +927,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.skcipher.base);
-	unsigned long int flags = tmpl->flags;
+	unsigned long flags = tmpl->flags;
 	struct crypto_authenc_keys keys;
 	int bs = crypto_shash_blocksize(ctx->shash);
 	int ds = crypto_shash_digestsize(ctx->shash);
@@ -972,8 +957,8 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	 * do software shash until EIP93 hash function complete.
 	 */
 	ipad = kcalloc(2, SHA512_BLOCK_SIZE, GFP_KERNEL);
- 	if (!ipad)
- 		return -ENOMEM;
+	if (!ipad)
+		return -ENOMEM;
 
 	opad = ipad + SHA512_BLOCK_SIZE;
 
@@ -1027,7 +1012,8 @@ static int mtk_aead_setauthsize(struct crypto_aead *ctfm,
 	struct crypto_tfm *tfm = crypto_aead_tfm(ctfm);
 	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
 	/* might be needed for IPSec SHA1 (3 Words vs 5 Words)
-	u32 maxauth = crypto_aead_maxauthsize(ctfm); */
+	u32 maxauth = crypto_aead_maxauthsize(ctfm);
+	*/
 
 	ctx->authsize = authsize;
 
@@ -1090,7 +1076,7 @@ static int mtk_aead_crypt(struct aead_request *req)
 
 	if (mtk->ring->requests > MTK_RING_BUSY) {
 		rctx->flags |= MTK_BUSY;
-                return -EBUSY;
+		return -EBUSY;
 	}
 
 	return -EINPROGRESS;
@@ -1243,7 +1229,7 @@ struct mtk_alg_template mtk_alg_ecb_aes = {
 			.cra_driver_name = "ecb(aes-eip93)",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
-                                        CRYPTO_ALG_NEED_FALLBACK |
+					CRYPTO_ALG_NEED_FALLBACK |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
@@ -1270,7 +1256,7 @@ struct mtk_alg_template mtk_alg_cbc_aes = {
 			.cra_driver_name = "cbc(aes-eip93)",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
-                                        CRYPTO_ALG_NEED_FALLBACK |
+					CRYPTO_ALG_NEED_FALLBACK |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = AES_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
@@ -1297,8 +1283,8 @@ struct mtk_alg_template mtk_alg_ctr_aes = {
 			.cra_driver_name = "ctr(aes-eip93)",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
-                                     CRYPTO_ALG_NEED_FALLBACK |
-                                     CRYPTO_ALG_KERN_DRIVER_ONLY,
+				     CRYPTO_ALG_NEED_FALLBACK |
+				     CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
 			.cra_alignmask = 0xf,
@@ -1324,7 +1310,7 @@ struct mtk_alg_template mtk_alg_rfc3686_aes = {
 			.cra_driver_name = "rfc3686(ctr(aes-eip93))",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
-                                        CRYPTO_ALG_NEED_FALLBACK |
+					CRYPTO_ALG_NEED_FALLBACK |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
@@ -1896,7 +1882,7 @@ struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes = {
 		.base = {
 			.cra_name = "echainiv(authenc(hmac(sha1),cbc(aes)))",
 			.cra_driver_name = "echainiv(authenc(hmac(sha1-eip93)"
-                                        ",cbc(aes-eip93))",
+					",cbc(aes-eip93))",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
@@ -1924,7 +1910,7 @@ struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes = {
 		.base = {
 			.cra_name = "echainiv(authenc(hmac(sha256),cbc(aes)))",
 			.cra_driver_name = "echainiv(authenc(hmac(sha256-eip93)"
-                                ",cbc(aes-eip93))",
+				",cbc(aes-eip93))",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
@@ -1952,11 +1938,11 @@ struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes = {
 		.base = {
 			.cra_name = "seqiv(authenc(hmac(sha1),rfc3686(ctr(aes)))",
 			.cra_driver_name = "seqiv(authenc(hmac(sha1-eip93),"
-                                "rfc3686(ctr(aes-eip93)))",
+				"rfc3686(ctr(aes-eip93)))",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
-			.cra_blocksize = AES_BLOCK_SIZE,
+			.cra_blocksize = 1,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
 			.cra_alignmask = 0,
 			.cra_init = mtk_aead_cra_init,
@@ -1980,11 +1966,11 @@ struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes = {
 		.base = {
 			.cra_name = "seqiv(authenc(hmac(sha256),rfc3686(ctr(aes)))",
 			.cra_driver_name = "seqiv(authenc(hmac(sha256-eip93),"
-                                "rfc3686(ctr(aes-eip93)))",
+				"rfc3686(ctr(aes-eip93)))",
 			.cra_priority = MTK_CRA_PRIORITY,
 			.cra_flags = CRYPTO_ALG_ASYNC |
 					CRYPTO_ALG_KERN_DRIVER_ONLY,
-			.cra_blocksize = AES_BLOCK_SIZE,
+			.cra_blocksize = 1,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
 			.cra_alignmask = 0,
 			.cra_init = mtk_aead_cra_init,
