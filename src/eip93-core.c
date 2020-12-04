@@ -180,15 +180,7 @@ static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 	u32 flags;
 
 get_more:
-	try = 1;
-	while (try--) {
-		nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
-		if (nreq)
-			break;
-	}
-
-	if (!nreq)
-		goto push_request;
+	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
 	while (nreq) {
 		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
@@ -236,6 +228,7 @@ get_more:
 			last_entry = true;
 			break;
 		}
+                nreq--;
 	}
 
 	if (last_entry) {

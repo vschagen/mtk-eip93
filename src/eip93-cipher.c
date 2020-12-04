@@ -833,6 +833,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	if (ret == 0)
 		return 0;
 
+        spin_lock_bh(&mtk->ring->lock);
 	mtk->ring->requests += ret;
 
 	if (!mtk->ring->busy) {
@@ -843,17 +844,16 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 			mtk->base + EIP93_REG_PE_RING_THRESH);
 		mtk->ring->busy = true;
 	}
+        spin_unlock_bh(&mtk->ring->lock);
 	/* Writing new descriptor count starts DMA action */
 	writel(ret, mtk->base + EIP93_REG_PE_CD_COUNT);
 
 	if (mtk->ring->requests > MTK_RING_BUSY) {
-		ret  = -EBUSY;
 		rctx->flags |= MTK_BUSY;
-	} else {
- 		ret= -EINPROGRESS;
+                return -EBUSY;
 	}
 
-	return ret;
+	return -EINPROGRESS;
 }
 
 static int mtk_skcipher_encrypt(struct skcipher_request *req)
@@ -1076,7 +1076,7 @@ static int mtk_aead_crypt(struct aead_request *req)
 	mtk->ring->requests += ret;
 
 	if (!mtk->ring->busy) {
-		DescriptorPendingCount = mtk->ring->requests;
+		DescriptorPendingCount = min_t(int, mtk->ring->requests, 32);
 		writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
 			(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
 			((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
@@ -1089,12 +1089,11 @@ static int mtk_aead_crypt(struct aead_request *req)
 	writel(ret, mtk->base + EIP93_REG_PE_CD_COUNT);
 
 	if (mtk->ring->requests > MTK_RING_BUSY) {
-		ret = -EBUSY;
 		rctx->flags |= MTK_BUSY;
-	} else
-		ret = -EINPROGRESS;
+                return -EBUSY;
+	}
 
-	return ret;
+	return -EINPROGRESS;
 }
 
 static int mtk_aead_encrypt(struct aead_request *req)
