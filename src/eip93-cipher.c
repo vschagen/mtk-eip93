@@ -4,7 +4,7 @@
  *
  * Richard van Schagen <vschagen@cs.com>
  */
-//#define DEBUG 1
+#define DEBUG 1
 #include <crypto/aead.h>
 #include <crypto/aes.h>
 #include <crypto/authenc.h>
@@ -47,8 +47,9 @@ inline void mtk_free_sg_cpy(const int len, struct scatterlist **sg)
 	*sg = NULL;
 }
 
-inline int mtk_make_sg_cpy(struct mtk_device *mtk, struct scatterlist *src, struct scatterlist **dst,
-		const int len, struct mtk_cipher_reqctx *rctx, const bool copy)
+inline int mtk_make_sg_cpy(struct mtk_device *mtk, struct scatterlist *src,
+		struct scatterlist **dst, const int len,
+		struct mtk_cipher_reqctx *rctx, const bool copy)
 {
 	void *pages;
 	int totallen;
@@ -353,11 +354,12 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	rctx->sg_dst = reqdst;
 	dst = reqdst;
 
-	if (ctx->aead)
+	if (ctx->aead) {
 		if (IS_ENCRYPT(flags))
 			totlen_dst += authsize;
 		else
 			totlen_src += authsize;
+	}
 
 	src_nents = sg_nents_for_len(src, totlen_src);
 	dst_nents = sg_nents_for_len(dst, totlen_dst);
@@ -405,6 +407,16 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	}
 
 	overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
+
+	/* dirty trick to get GCM to work:
+	 * Check if 1st scatterlist is on same cache line as reqiv
+	 */
+	if (overflow) {
+		if (((u32)sg_virt(src) >> 5) == ((u32)reqiv >> 5)) {
+			src_align = false;
+			dst_align = false;
+		}
+	}
 
 	if (!src_align) {
 		err = mtk_make_sg_cpy(mtk, rctx->sg_src, &rctx->sg_src,
@@ -575,6 +587,7 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	if (rctx->sg_src == rctx->sg_dst) {
 		dma_unmap_sg(mtk->dev, rctx->sg_dst, sg_nents(rctx->sg_dst),
 							DMA_FROM_DEVICE);
+
 		goto process_tag;
 	}
 
