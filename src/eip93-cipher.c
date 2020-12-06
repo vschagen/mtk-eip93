@@ -406,18 +406,6 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			dst_align = mtk_is_sg_aligned(reqdst, totlen_dst, blksize);
 	}
 
-	overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
-
-	/* dirty trick to get GCM to work:
-	 * Check if 1st scatterlist is on same cache line as reqiv
-	 */
-	if (overflow) {
-		if (((u32)sg_virt(src) >> 5) == ((u32)reqiv >> 5)) {
-			src_align = false;
-			dst_align = false;
-		}
-	}
-
 	if (!src_align) {
 		err = mtk_make_sg_cpy(mtk, rctx->sg_src, &rctx->sg_src,
 					totlen_src, rctx, true);
@@ -435,10 +423,19 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		dst = rctx->sg_dst;
 	}
 
-	if (IS_CBC(flags) || IS_CTR(flags))
-		memcpy(iv, reqiv, AES_BLOCK_SIZE);
+	if (IS_CBC(flags) || IS_CTR(flags)) {
+		if IS_RFC3686(flags) {
+			rctx->iv_dma = false;
+		}
+		memcpy(iv, reqiv, rctx->ivsize);
+	} else {
+		if (rctx->iv_dma)
+			rctx->iv_dma = false;
+	}
 
 	rctx->saState_ctr = NULL;
+
+	overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
 
 	if (overflow) {
 		/* Compute data length. */
@@ -460,28 +457,49 @@ inline int mtk_send_req(struct crypto_async_request *base,
 				GFP_KERNEL, &rctx->saState_base_ctr);
 			if (!rctx->saState_ctr)
 				dev_err(mtk->dev, "No saState_ctr DMA memory\n");
+			memcpy(rctx->saState_ctr->stateIv, reqiv, AES_BLOCK_SIZE);
 		}
 	}
 	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
 	 * implies __dma_cache_wback_inv
 	 */
 	dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
-
 	if (src != dst)
-		dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
+	dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
 
-	rctx->saState = dma_pool_zalloc(mtk->saState_pool, GFP_KERNEL,
-					&rctx->saState_base);
-	if (!rctx->saState)
-		dev_err(mtk->dev, "No saState DMA memory\n");
+	if (rctx->iv_dma) {
+		rctx->saState = (void *)reqiv;
+	} else {
+		rctx->saState = dma_pool_zalloc(mtk->saState_pool, GFP_KERNEL,
+							&rctx->saState_base);
+		if (!rctx->saState)
+			dev_err(mtk->dev, "No saState DMA memory\n");
+	}
+	saState = rctx->saState;
+
+	if (rctx->saState_ctr)
+		memcpy(saState->stateIv, iv, rctx->ivsize);
+
+	if (IS_RFC3686(flags)) {
+		saState->stateIv[0] = ctx->sa->saNonce;
+		saState->stateIv[1] = iv[0];
+		saState->stateIv[2] = iv[1];
+		saState->stateIv[3] = cpu_to_be32(1);
+	}
+
+	if (rctx->iv_dma)
+		rctx->saState_base = dma_map_single(mtk->dev, (void *)reqiv,
+						rctx->ivsize,	DMA_TO_DEVICE);
+	else if (IS_CBC(flags) || overflow)
+			memcpy(saState->stateIv, iv, rctx->ivsize);
+
+	saState_base = rctx->saState_base;
 
 	rctx->saRecord = dma_pool_zalloc(mtk->saRecord_pool, GFP_KERNEL,
 					&rctx->saRecord_base);
 	if (!rctx->saRecord)
 		dev_err(mtk->dev, "No saRecord DMA memory\n");
 
-	saState = rctx->saState;
-	saState_base = rctx->saState_base;
 	saRecord = rctx->saRecord;
 	saRecord_base = rctx->saRecord_base;
 
@@ -530,15 +548,6 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		}
 	}
 
-	if (IS_CBC(flags) || overflow)
-		memcpy(saState->stateIv, reqiv, AES_BLOCK_SIZE);
-	else if (IS_RFC3686(flags)) {
-		saState->stateIv[0] = ctx->sa->saNonce;
-		saState->stateIv[1] = iv[0];
-		saState->stateIv[2] = iv[1];
-		saState->stateIv[3] = cpu_to_be32(1);
-	}
-
 	/*
 	 * Keep all descriptors off one request together
 	 */
@@ -548,6 +557,9 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	if (unlikely(complete == false)) {
 		src_ctr = src;
 		dst_ctr = dst;
+		/* Set new State */
+		saState = rctx->saState_ctr;
+		saState_base = rctx->saState_base_ctr;
 		/* process until offset of the counter overflow */
 		ctr_cdr = mtk_scatter_combine(mtk, saRecord_base,
 				saState_base, src, dst, offset, complete,
@@ -556,10 +568,9 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		src = scatterwalk_ffwd(rctx->ctr_src, src_ctr, offset);
 		dst = ((src_ctr == dst_ctr) ? src :
 			scatterwalk_ffwd(rctx->ctr_dst, dst_ctr, offset));
-		/* Set new State */
-		saState = rctx->saState_ctr;
-		saState_base = rctx->saState_base_ctr;
-		memcpy(saState->stateIv, iv, AES_BLOCK_SIZE);
+
+		saState = rctx->saState;
+		saState_base = rctx->saState_base;
 		datalen -= offset;
 		complete = true;
 		/* map DMA_BIDIRECTIONAL to invalidate cache on destination */
@@ -623,8 +634,6 @@ void mtk_handle_result(struct mtk_device *mtk,
 	struct scatterlist *reqsrc, struct scatterlist *reqdst,	u8 *reqiv,
 	bool complete, int err)
 {
-	struct saState_s *saState;
-
 	mtk_unmap_dma(mtk, rctx, reqsrc, reqdst);
 
 	if (IS_BUSY(rctx->flags)) {
@@ -637,22 +646,23 @@ void mtk_handle_result(struct mtk_device *mtk,
 		return;
 
 	if ((!IS_RFC3686(rctx->flags)) &&
-		(IS_CBC(rctx->flags) || IS_CTR(rctx->flags))) {
-
-		if (!rctx->saState_ctr)
-			saState = rctx->saState;
-		else
-			saState = rctx->saState_ctr;
-
-		memcpy(reqiv, saState->stateIv, rctx->ivsize);
+				(IS_CBC(rctx->flags) || IS_CTR(rctx->flags))) {
+		if (!rctx->iv_dma) {
+ 			memcpy(reqiv, rctx->saState->stateIv, rctx->ivsize);
+		}
 	}
-	dma_pool_free(mtk->saRecord_pool, rctx->saRecord,
-						rctx->saRecord_base);
-	dma_pool_free(mtk->saState_pool, rctx->saState,
-						rctx->saState_base);
+
+	if (rctx->iv_dma)
+		dma_unmap_single(mtk->dev, rctx->saState_base, rctx->ivsize,
+						DMA_BIDIRECTIONAL);
+	else
+		dma_pool_free(mtk->saState_pool, rctx->saState,
+							rctx->saState_base);
 	if (rctx->saState_ctr)
 		dma_pool_free(mtk->saState_pool, rctx->saState_ctr,
 						rctx->saState_base_ctr);
+
+	dma_pool_free(mtk->saRecord_pool, rctx->saRecord, rctx->saRecord_base);
 
 	local_bh_disable();
 	async->complete(async, err);
@@ -816,6 +826,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	rctx->authsize = 0;
 	rctx->assoclen = 0;
 	rctx->ivsize = ivsize;
+	rctx->iv_dma = true;
 
 	if (mtk->ring->requests > MTK_RING_BUSY)
 		return -EAGAIN;
@@ -1050,6 +1061,7 @@ static int mtk_aead_crypt(struct aead_request *req)
 	rctx->assoclen = req->assoclen;
 	rctx->authsize = ctx->authsize;
 	rctx->ivsize = ivsize;
+	rctx->iv_dma = false;
 
 	if IS_DECRYPT(rctx->flags)
 		rctx->textsize -= rctx->authsize;

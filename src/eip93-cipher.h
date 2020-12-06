@@ -61,6 +61,7 @@ struct mtk_cipher_reqctx {
 	unsigned long			flags;
 	u32				textsize;
 	u32				ivsize;
+	bool				iv_dma;
 	struct saRecord_s		*saRecord;
 	dma_addr_t			saRecord_base;
 	struct saState_s		*saState;
