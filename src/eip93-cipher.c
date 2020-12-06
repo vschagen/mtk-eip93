@@ -4,7 +4,7 @@
  *
  * Richard van Schagen <vschagen@cs.com>
  */
-#define DEBUG 1
+//#define DEBUG 1
 #include <crypto/aead.h>
 #include <crypto/aes.h>
 #include <crypto/authenc.h>
@@ -424,7 +424,8 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	}
 
 	if (IS_CBC(flags) || IS_CTR(flags)) {
-		if IS_RFC3686(flags) {
+		/* make sure IV is DMA-able */
+		if (!IS_ALIGNED((u32)reqiv, 16)) {
 			rctx->iv_dma = false;
 		}
 		memcpy(iv, reqiv, rctx->ivsize);
