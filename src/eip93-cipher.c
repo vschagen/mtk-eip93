@@ -110,7 +110,7 @@ inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len, const int blksz)
 	return false;
 }
 
-inline void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
+void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 				const u32 nonce, const unsigned int keylen,
 				const unsigned long flags)
 {
@@ -265,7 +265,9 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 				remainin -= len;
 				nextout = true;
 		}
+		n -= len;
 
+		spin_lock(&mtk->ring->write_lock);
 		rdesc = mtk_add_rdesc(mtk);
 		if (IS_ERR(rdesc))
 			dev_err(mtk->dev, "No RDR mem");
@@ -285,23 +287,23 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 		cdesc->stateAddr = saState_base;
 		cdesc->arc4Addr = (u32)areq;
 		cdesc->userId = MTK_DESC_ASYNC;
+		if (n == 0)
+			if (complete == true) {
+				cdesc->userId |= MTK_DESC_LAST;
+				cdesc->userId |= MTK_DESC_FINISH;
+				}
 		cdesc->peLength.bits.byPass = 0;
 		cdesc->peLength.bits.length = len;
 		cdesc->peLength.bits.hostReady = 1;
+		spin_unlock(&mtk->ring->write_lock);
 
 		ndesc_cdr++;
-		n -= len;
 	} while (n);
-
-	if (complete == true) {
-		cdesc->userId |= MTK_DESC_LAST;
-		cdesc->userId |= MTK_DESC_FINISH;
-	}
 
 	return ndesc_cdr;
 }
 
-inline int mtk_send_req(struct crypto_async_request *base,
+int mtk_send_req(struct crypto_async_request *base,
 		const struct mtk_cipher_ctx *ctx,
 		struct scatterlist *reqsrc, struct scatterlist *reqdst,
 		const u8 *reqiv, struct mtk_cipher_reqctx *rctx)
@@ -328,7 +330,6 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	bool src_align = true, dst_align = true;
 	u32 iv[AES_BLOCK_SIZE / sizeof(u32)], *esph;
 	int blksize = 1, offsetin = 0;
-	unsigned long irqflags;
 
 	switch ((flags & MTK_ALG_MASK))	{
 	case MTK_ALG_AES:
@@ -471,11 +472,12 @@ inline int mtk_send_req(struct crypto_async_request *base,
 	if (rctx->iv_dma) {
 		rctx->saState = (void *)reqiv;
 	} else {
-		rctx->saState = dma_pool_zalloc(mtk->saState_pool, GFP_KERNEL,
-							&rctx->saState_base);
+		rctx->saState = dma_pool_zalloc(mtk->saState_pool,
+					GFP_KERNEL, &rctx->saState_base);
 		if (!rctx->saState)
 			dev_err(mtk->dev, "No saState DMA memory\n");
 	}
+
 	saState = rctx->saState;
 
 	if (rctx->saState_ctr)
@@ -549,12 +551,6 @@ inline int mtk_send_req(struct crypto_async_request *base,
 		}
 	}
 
-	/*
-	 * Keep all descriptors off one request together
-	 */
-
-	spin_lock_irqsave(&mtk->ring->write_lock, irqflags);
-
 	if (unlikely(complete == false)) {
 		src_ctr = src;
 		dst_ctr = dst;
@@ -584,8 +580,6 @@ inline int mtk_send_req(struct crypto_async_request *base,
 			saState_base, src, dst, datalen, complete,
 			(void *)base, offsetin);
 
-	spin_unlock_irqrestore(&mtk->ring->write_lock, irqflags);
-
 	return ndesc_cdr + ctr_cdr;
 }
 
@@ -599,7 +593,6 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	if (rctx->sg_src == rctx->sg_dst) {
 		dma_unmap_sg(mtk->dev, rctx->sg_dst, sg_nents(rctx->sg_dst),
 							DMA_FROM_DEVICE);
-
 		goto process_tag;
 	}
 
@@ -613,8 +606,8 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 
 	/* SHA tags need convertion from net-to-host */
 process_tag:
-	if (!IS_GENIV(rctx->flags) && IS_ENCRYPT(rctx->flags)) {
-		if (rctx->authsize) {
+	if (rctx->authsize) {
+		if (!IS_GENIV(rctx->flags) && IS_ENCRYPT(rctx->flags)) {
 			if (!IS_HASH_MD5(rctx->flags)) {
 				otag = sg_virt(rctx->sg_dst) + len;
 				for (i = 0; i < (rctx->authsize / 4); i++)
@@ -646,19 +639,17 @@ void mtk_handle_result(struct mtk_device *mtk,
 	if (!complete)
 		return;
 
-	if ((!IS_RFC3686(rctx->flags)) &&
-				(IS_CBC(rctx->flags) || IS_CTR(rctx->flags))) {
-		if (!rctx->iv_dma) {
- 			memcpy(reqiv, rctx->saState->stateIv, rctx->ivsize);
-		}
-	}
-
-	if (rctx->iv_dma)
+	if (rctx->iv_dma) {
 		dma_unmap_single(mtk->dev, rctx->saState_base, rctx->ivsize,
 						DMA_BIDIRECTIONAL);
-	else
+	} else {
+		if (IS_CBC(rctx->flags) || IS_CTR(rctx->flags)) {
+			memcpy(reqiv, rctx->saState->stateIv, rctx->ivsize);
+		}
 		dma_pool_free(mtk->saState_pool, rctx->saState,
 							rctx->saState_base);
+	}
+
 	if (rctx->saState_ctr)
 		dma_pool_free(mtk->saState_pool, rctx->saState_ctr,
 						rctx->saState_base_ctr);
@@ -782,13 +773,10 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 
 	mtk_ctx_saRecord(ctx, key, nonce, keylen, flags);
 
-	if (ctx->fallback) {
+	if (ctx->fallback)
 		ret = crypto_skcipher_setkey(ctx->fallback, key, len);
-		if (ret)
-			return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 static int mtk_skcipher_crypt(struct skcipher_request *req)
@@ -799,7 +787,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	struct mtk_device *mtk = ctx->mtk;
 	int ret;
 	int DescriptorCountDone = MTK_RING_SIZE - 1;
-	int DescriptorDoneTimeout = 2;
+	int DescriptorDoneTimeout = 3;
 	int DescriptorPendingCount = 0;
 	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
 	u32 ivsize = crypto_skcipher_ivsize(skcipher);
@@ -1055,7 +1043,7 @@ static int mtk_aead_crypt(struct aead_request *req)
 	u32 ivsize = crypto_aead_ivsize(aead);
 	int ret;
 	int DescriptorCountDone = MTK_RING_SIZE - 1;
-	int DescriptorDoneTimeout = 15;
+	int DescriptorDoneTimeout = 3;
 	int DescriptorPendingCount = 0;
 
 	rctx->textsize = req->cryptlen;

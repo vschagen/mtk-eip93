@@ -30,7 +30,7 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	init_completion(&prng->Filled);
 	atomic_set(&prng->State, BUF_EMPTY);
 
-	spin_lock(&mtk->ring[0].write_lock);
+	spin_lock(&mtk->ring->write_lock);
 	cdesc = mtk_add_cdesc(mtk);
 
 	cdesc->peCrtlStat.bits.hostReady = 1;
@@ -49,12 +49,12 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	cdesc->peLength.bits.hostReady = 1;
 
 	rdesc = mtk_add_rdesc(mtk);
-	spin_unlock(&mtk->ring[0].write_lock);
+	spin_unlock(&mtk->ring->write_lock);
 	/*   */
-	spin_lock(&mtk->ring[0].lock);
+	spin_lock(&mtk->ring->lock);
 	mtk->ring[0].requests += 1;
 	mtk->ring[0].busy = true;
-	spin_unlock(&mtk->ring[0].lock);
+	spin_unlock(&mtk->ring->lock);
 
 	writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
 

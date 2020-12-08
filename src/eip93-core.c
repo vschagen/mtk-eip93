@@ -55,10 +55,10 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_ecb_null,
 	&mtk_alg_authenc_hmac_sha224_ecb_null,
 	&mtk_alg_authenc_hmac_sha256_ecb_null,
-	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
-	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
-	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
-	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
+//	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
+//	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
+//	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
+//	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
 };
@@ -153,9 +153,9 @@ static inline void mtk_irq_clear(struct mtk_device *mtk, u32 mask)
 inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
 {
 	int DescriptorCountDone = MTK_RING_SIZE - 1;
-	int DescriptorDoneTimeout = 15;
+	int DescriptorDoneTimeout = 3;
 
-	DescriptorPendingCount = min_t(int, mtk->ring->requests, 8);
+	DescriptorPendingCount = min_t(int, mtk->ring->requests, 32);
 
 	if (!DescriptorPendingCount)
 		return;
@@ -264,7 +264,6 @@ push_request:
 		mtk->ring->busy = false;
 
 	spin_unlock(&mtk->ring->lock);
-
 queue_done:
 	mtk_irq_enable(mtk, BIT(1));
 }

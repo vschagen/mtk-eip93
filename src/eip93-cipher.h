@@ -44,17 +44,15 @@ extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes;
 extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes;
 
-
 struct mtk_cipher_ctx {
 	struct mtk_context		base;
 	struct mtk_device		*mtk;
 	struct saRecord_s		*sa;
-
+	struct crypto_skcipher		*fallback;
 	/* AEAD specific */
 	unsigned int			authsize;
 	struct crypto_shash		*shash;
 	bool				aead;
-	struct crypto_skcipher		*fallback;
 };
 
 struct mtk_cipher_reqctx {
@@ -66,9 +64,6 @@ struct mtk_cipher_reqctx {
 	dma_addr_t			saRecord_base;
 	struct saState_s		*saState;
 	dma_addr_t			saState_base;
-	/* AEAD */
-	u32				assoclen;
-	u32				authsize;
 	/* copy in case of mis-alignment or AEAD if no-consecutive blocks */
 	struct scatterlist		*sg_src;
 	struct scatterlist		*sg_dst;
@@ -77,6 +72,9 @@ struct mtk_cipher_reqctx {
 	dma_addr_t			saState_base_ctr;
 	struct scatterlist		ctr_src[2];
 	struct scatterlist		ctr_dst[2];
+	/* AEAD */
+	u32				assoclen;
+	u32				authsize;
 	/* request fallback, keep at the end */
 	struct skcipher_request		fallback_req;
 };
