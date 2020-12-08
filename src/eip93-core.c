@@ -183,15 +183,9 @@ get_more:
 	nreq = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
 	while (nreq) {
-		rdesc = mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
+		rdesc = mtk_get_descriptor(mtk);
 		if (IS_ERR(rdesc)) {
 			dev_err(mtk->dev, "Ndesc: %d nreq: %d\n", handled, nreq);
-			ret = -EIO;
-			break;
-		}
-		cdesc = mtk_ring_next_rptr(mtk, &mtk->ring->cdr);
-		if (IS_ERR(cdesc)) {
-			dev_err(mtk->dev, "Cant get Cdesc");
 			ret = -EIO;
 			break;
 		}

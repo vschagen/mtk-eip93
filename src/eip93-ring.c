@@ -41,42 +41,42 @@ inline void *mtk_ring_next_rptr(struct mtk_device *mtk,
 	return ptr;
 }
 
-inline void mtk_ring_rollback_wptr(struct mtk_device *mtk,
-				 	struct mtk_desc_ring *ring)
-{
-	if (ring->write == ring->read)
-		return;
-
-	if (ring->write == ring->base)
-		ring->write = ring->base_end - ring->offset;
-	else
-		ring->write -= ring->offset;
-}
-
-inline struct eip93_descriptor_s *mtk_add_cdesc(struct mtk_device *mtk)
+inline int mtk_put_descriptor(struct mtk_device *mtk,
+					struct eip93_descriptor_s *desc)
 {
 	struct eip93_descriptor_s *cdesc;
+	struct eip93_descriptor_s *rdesc;
 
+	spin_lock(&mtk->ring->write_lock);
 	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring->cdr);
 
 	if (IS_ERR(cdesc))
-		return cdesc;
-
-	memset(cdesc, 0, sizeof(struct eip93_descriptor_s));
-
-	return cdesc;
-}
-
-inline struct eip93_descriptor_s *mtk_add_rdesc(struct mtk_device *mtk)
-{
-	struct eip93_descriptor_s *rdesc;
+		return -ENOENT;
 
 	rdesc = mtk_ring_next_wptr(mtk, &mtk->ring->rdr);
 
-	if (IS_ERR(rdesc))
-		return rdesc;
+	if (IS_ERR(rdesc)) {
+		spin_lock(&mtk->ring->write_lock);
+		return -ENOENT;
+	}
 
 	memset(rdesc, 0, sizeof(struct eip93_descriptor_s));
+	memcpy(cdesc, desc, sizeof(struct eip93_descriptor_s));
 
-	return rdesc;
+	spin_unlock(&mtk->ring->write_lock);
+
+	return 0;
+}
+
+inline void *mtk_get_descriptor(struct mtk_device *mtk)
+{
+	struct eip93_descriptor_s *cdesc;
+
+	cdesc = mtk_ring_next_rptr(mtk, &mtk->ring->cdr);
+	if (IS_ERR(cdesc)) {
+		dev_err(mtk->dev, "Cant get Cdesc");
+		return PTR_ERR(-ENOENT);
+	}
+
+	return mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
 }

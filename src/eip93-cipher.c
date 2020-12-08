@@ -216,8 +216,9 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 	bool nextin = false;
 	bool nextout = false;
 	struct eip93_descriptor_s *cdesc;
-	struct eip93_descriptor_s *rdesc;
-	int ndesc_cdr = 0;
+	int ndesc_cdr = 0, err;
+
+	cdesc = kzalloc(sizeof(struct eip93_descriptor_s), GFP_KERNEL);
 
 	n = datalen;
 	remainin = min(sg_dma_len(sgsrc), n);
@@ -267,15 +268,6 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 		}
 		n -= len;
 
-		spin_lock(&mtk->ring->write_lock);
-		rdesc = mtk_add_rdesc(mtk);
-		if (IS_ERR(rdesc))
-			dev_err(mtk->dev, "No RDR mem");
-
-		cdesc = mtk_add_cdesc(mtk);
-		if (IS_ERR(cdesc))
-			dev_err(mtk->dev, "No CDR mem");
-
 		cdesc->peCrtlStat.bits.hostReady = 1;
 		cdesc->peCrtlStat.bits.prngMode = 0;
 		cdesc->peCrtlStat.bits.hashFinal = 1;
@@ -295,10 +287,15 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 		cdesc->peLength.bits.byPass = 0;
 		cdesc->peLength.bits.length = len;
 		cdesc->peLength.bits.hostReady = 1;
-		spin_unlock(&mtk->ring->write_lock);
+
+		err = mtk_put_descriptor(mtk, cdesc);
+		if (err)
+			dev_err(mtk->dev, "No empty Descriptor space");
 
 		ndesc_cdr++;
 	} while (n);
+
+	kfree(cdesc);
 
 	return ndesc_cdr;
 }

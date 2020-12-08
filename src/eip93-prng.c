@@ -15,9 +15,8 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 {
 	struct mtk_prng_device *prng = mtk->prng;
 	struct eip93_descriptor_s *cdesc;
-	struct eip93_descriptor_s *rdesc;
 	int cur = prng->cur_buf;
-	int len, mode;
+	int len, mode, err;
 
 	if (reset) {
 		len = 0;
@@ -29,9 +28,7 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 
 	init_completion(&prng->Filled);
 	atomic_set(&prng->State, BUF_EMPTY);
-
-	spin_lock(&mtk->ring->write_lock);
-	cdesc = mtk_add_cdesc(mtk);
+	cdesc = kzalloc(sizeof(struct eip93_descriptor_s), GFP_KERNEL);
 
 	cdesc->peCrtlStat.bits.hostReady = 1;
 	cdesc->peCrtlStat.bits.prngMode = mode;
@@ -48,8 +45,11 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 	cdesc->peLength.bits.length = 4080;
 	cdesc->peLength.bits.hostReady = 1;
 
-	rdesc = mtk_add_rdesc(mtk);
-	spin_unlock(&mtk->ring->write_lock);
+	err = mtk_put_descriptor(mtk, cdesc);
+	if (err)
+		dev_err(mtk->dev, "PRNG: No Descriptor space");
+
+	kfree(cdesc);
 	/*   */
 	spin_lock(&mtk->ring->lock);
 	mtk->ring[0].requests += 1;
