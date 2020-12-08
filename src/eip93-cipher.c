@@ -203,7 +203,7 @@ void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
  * For performance better to wait for hardware to perform multiple DMA
  *
  */
-inline int mtk_scatter_combine(struct mtk_device *mtk,
+int mtk_scatter_combine(struct mtk_device *mtk,
  			struct mtk_cipher_reqctx *rctx,
 			struct scatterlist *sgsrc, struct scatterlist *sgdst,
 			u32 datalen,  bool complete, unsigned int *areq,
@@ -221,10 +221,10 @@ inline int mtk_scatter_combine(struct mtk_device *mtk,
 	struct eip93_descriptor_s cdesc;
 	int ndesc_cdr = 0, err;
 
-	if (rctx->saState_ctr)
-		saState_base = rctx->saState_base_ctr;
-	else
+	if (complete)
 		saState_base = rctx->saState_base;
+	else
+		saState_base = rctx->saState_base_ctr;
 
 	cdesc.peCrtlStat.word = 0;
 	cdesc.peCrtlStat.bits.hostReady = 1;
@@ -399,7 +399,8 @@ int mtk_send_req(struct crypto_async_request *base,
 			if (src ==  dst)
 				dst_align = src_align;
 			else
-				dst_align = mtk_is_sg_aligned(reqdst, totlen_dst, blksize);
+				dst_align = mtk_is_sg_aligned(reqdst,
+							totlen_dst, blksize);
 		} else {
 			src_align = false;
 			dst_align = false;
@@ -409,7 +410,8 @@ int mtk_send_req(struct crypto_async_request *base,
 		if (src == dst)
 			dst_align = src_align;
 		else
-			dst_align = mtk_is_sg_aligned(reqdst, totlen_dst, blksize);
+			dst_align = mtk_is_sg_aligned(reqdst, totlen_dst,
+								blksize);
 	}
 
 	if (!src_align) {
@@ -429,18 +431,18 @@ int mtk_send_req(struct crypto_async_request *base,
 		dst = rctx->sg_dst;
 	}
 
-	if (IS_CBC(flags) || IS_CTR(flags)) {
-		/* make sure IV is DMA-able */
-		if (!IS_ALIGNED((u32)reqiv, 16)) {
-			rctx->iv_dma = false;
-		}
-		memcpy(iv, reqiv, rctx->ivsize);
-	} else {
-		if (rctx->iv_dma)
-			rctx->iv_dma = false;
+	rctx->saState_ctr = NULL;
+
+	if (IS_ECB(flags)) {
+		rctx->iv_dma = false;
+		rctx->saState_base = NULL;
+		goto skip_iv;
 	}
 
-	rctx->saState_ctr = NULL;
+	/* make sure IV is DMA-able */
+	if (!IS_ALIGNED((u32)reqiv, 16))
+			rctx->iv_dma = false;
+	memcpy(iv, reqiv, rctx->ivsize);
 
 	overflow = (IS_CTR(rctx->flags) && (!IS_RFC3686(rctx->flags)));
 
@@ -463,16 +465,11 @@ int mtk_send_req(struct crypto_async_request *base,
 			rctx->saState_ctr = dma_pool_zalloc(mtk->saState_pool,
 				GFP_KERNEL, &rctx->saState_base_ctr);
 			if (!rctx->saState_ctr)
-				dev_err(mtk->dev, "No saState_ctr DMA memory\n");
-			memcpy(rctx->saState_ctr->stateIv, reqiv, AES_BLOCK_SIZE);
+				dev_err(mtk->dev, "No State_ctr DMA memory\n");
+
+			memcpy(rctx->saState_ctr->stateIv, reqiv, rctx->ivsize);
 		}
 	}
-	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
-	 * implies __dma_cache_wback_inv
-	 */
-	dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
-	if (src != dst)
-	dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
 
 	if (rctx->iv_dma) {
 		rctx->saState = (void *)reqiv;
@@ -501,7 +498,13 @@ int mtk_send_req(struct crypto_async_request *base,
 	else if (IS_CBC(flags) || overflow)
 			memcpy(saState->stateIv, iv, rctx->ivsize);
 
-	saState_base = rctx->saState_base;
+skip_iv:
+	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
+	 * implies __dma_cache_wback_inv
+	 */
+	dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
+	if (src != dst)
+		dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
 
 	rctx->saRecord = dma_pool_zalloc(mtk->saRecord_pool, GFP_KERNEL,
 					&rctx->saRecord_base);
@@ -515,6 +518,9 @@ int mtk_send_req(struct crypto_async_request *base,
 
 	if (IS_DECRYPT(flags))
 		saRecord->saCmd0.bits.direction = 1;
+
+	if (IS_ECB(flags))
+		saRecord->saCmd0.bits.saveIv = 0;
 
 	if (IS_HMAC(flags)) {
 		saRecord->saCmd1.bits.byteOffset = 0;
@@ -559,9 +565,6 @@ int mtk_send_req(struct crypto_async_request *base,
 	if (unlikely(complete == false)) {
 		src_ctr = src;
 		dst_ctr = dst;
-		/* Set new State */
-		saState = rctx->saState_ctr;
-		saState_base = rctx->saState_base_ctr;
 		/* process until offset of the counter overflow */
 		ctr_cdr = mtk_scatter_combine(mtk, rctx, src, dst, offset,
 						complete, (void *)base, 0);
@@ -570,8 +573,6 @@ int mtk_send_req(struct crypto_async_request *base,
 		dst = ((src_ctr == dst_ctr) ? src :
 			scatterwalk_ffwd(rctx->ctr_dst, dst_ctr, offset));
 
-		saState = rctx->saState;
-		saState_base = rctx->saState_base;
 		datalen -= offset;
 		complete = true;
 		/* map DMA_BIDIRECTIONAL to invalidate cache on destination */
@@ -646,11 +647,11 @@ void mtk_handle_result(struct mtk_device *mtk,
 		dma_unmap_single(mtk->dev, rctx->saState_base, rctx->ivsize,
 						DMA_BIDIRECTIONAL);
 	} else {
-		if (IS_CBC(rctx->flags) || IS_CTR(rctx->flags)) {
+		if (!IS_ECB(rctx->flags)) {
 			memcpy(reqiv, rctx->saState->stateIv, rctx->ivsize);
-		}
-		dma_pool_free(mtk->saState_pool, rctx->saState,
+			dma_pool_free(mtk->saState_pool, rctx->saState,
 							rctx->saState_base);
+		}
 	}
 
 	if (rctx->saState_ctr)
