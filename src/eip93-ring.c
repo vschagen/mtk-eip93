@@ -42,7 +42,7 @@ inline void *mtk_ring_next_rptr(struct mtk_device *mtk,
 }
 
 inline int mtk_put_descriptor(struct mtk_device *mtk,
-					struct eip93_descriptor_s *desc)
+					struct eip93_descriptor_s desc)
 {
 	struct eip93_descriptor_s *cdesc;
 	struct eip93_descriptor_s *rdesc;
@@ -61,7 +61,7 @@ inline int mtk_put_descriptor(struct mtk_device *mtk,
 	}
 
 	memset(rdesc, 0, sizeof(struct eip93_descriptor_s));
-	memcpy(cdesc, desc, sizeof(struct eip93_descriptor_s));
+	memcpy(cdesc, &desc, sizeof(struct eip93_descriptor_s));
 
 	spin_unlock(&mtk->ring->write_lock);
 

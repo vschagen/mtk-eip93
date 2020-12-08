@@ -14,7 +14,7 @@
 static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 {
 	struct mtk_prng_device *prng = mtk->prng;
-	struct eip93_descriptor_s *cdesc;
+	struct eip93_descriptor_s cdesc;
 	int cur = prng->cur_buf;
 	int len, mode, err;
 
@@ -28,28 +28,27 @@ static int mtk_prng_push_job(struct mtk_device *mtk, bool reset)
 
 	init_completion(&prng->Filled);
 	atomic_set(&prng->State, BUF_EMPTY);
-	cdesc = kzalloc(sizeof(struct eip93_descriptor_s), GFP_KERNEL);
 
-	cdesc->peCrtlStat.bits.hostReady = 1;
-	cdesc->peCrtlStat.bits.prngMode = mode;
-	cdesc->peCrtlStat.bits.hashFinal = 0;
-	cdesc->peCrtlStat.bits.padCrtlStat = 0;
-	cdesc->peCrtlStat.bits.peReady = 0;
-	cdesc->srcAddr = 0;
-	cdesc->dstAddr = (u32)prng->PRNGBuffer_dma[cur];
-	cdesc->saAddr = (u32)prng->PRNGSaRecord_dma;
-	cdesc->stateAddr = 0;
-	cdesc->arc4Addr = 0;
-	cdesc->userId = MTK_DESC_PRNG | MTK_DESC_LAST | MTK_DESC_FINISH;
-	cdesc->peLength.bits.byPass = 0;
-	cdesc->peLength.bits.length = 4080;
-	cdesc->peLength.bits.hostReady = 1;
+	memset(&cdesc, 0, sizeof(struct eip93_descriptor_s));
+	cdesc.peCrtlStat.bits.hostReady = 1;
+	cdesc.peCrtlStat.bits.prngMode = mode;
+	cdesc.peCrtlStat.bits.hashFinal = 0;
+	cdesc.peCrtlStat.bits.padCrtlStat = 0;
+	cdesc.peCrtlStat.bits.peReady = 0;
+	cdesc.srcAddr = 0;
+	cdesc.dstAddr = (u32)prng->PRNGBuffer_dma[cur];
+	cdesc.saAddr = (u32)prng->PRNGSaRecord_dma;
+	cdesc.stateAddr = 0;
+	cdesc.arc4Addr = 0;
+	cdesc.userId = MTK_DESC_PRNG | MTK_DESC_LAST | MTK_DESC_FINISH;
+	cdesc.peLength.bits.byPass = 0;
+	cdesc.peLength.bits.length = 4080;
+	cdesc.peLength.bits.hostReady = 1;
 
 	err = mtk_put_descriptor(mtk, cdesc);
 	if (err)
 		dev_err(mtk->dev, "PRNG: No Descriptor space");
 
-	kfree(cdesc);
 	/*   */
 	spin_lock(&mtk->ring->lock);
 	mtk->ring[0].requests += 1;

@@ -215,10 +215,22 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 	u32 srcAddr, dstAddr;
 	bool nextin = false;
 	bool nextout = false;
-	struct eip93_descriptor_s *cdesc;
+	struct eip93_descriptor_s cdesc;
 	int ndesc_cdr = 0, err;
 
-	cdesc = kzalloc(sizeof(struct eip93_descriptor_s), GFP_KERNEL);
+	cdesc.peCrtlStat.word = 0;
+	cdesc.peCrtlStat.bits.hostReady = 1;
+	cdesc.peCrtlStat.bits.prngMode = 0;
+	cdesc.peCrtlStat.bits.hashFinal = 1;
+	cdesc.peCrtlStat.bits.padCrtlStat = 0;
+	cdesc.peCrtlStat.bits.peReady = 0;
+	cdesc.saAddr = saRecord_base;
+	cdesc.stateAddr = saState_base;
+	cdesc.arc4Addr = (u32)areq;
+	cdesc.userId = MTK_DESC_ASYNC;
+	cdesc.peLength.word = 0;
+	cdesc.peLength.bits.byPass = 0;
+	cdesc.peLength.bits.hostReady = 1;
 
 	n = datalen;
 	remainin = min(sg_dma_len(sgsrc), n);
@@ -268,25 +280,15 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 		}
 		n -= len;
 
-		cdesc->peCrtlStat.bits.hostReady = 1;
-		cdesc->peCrtlStat.bits.prngMode = 0;
-		cdesc->peCrtlStat.bits.hashFinal = 1;
-		cdesc->peCrtlStat.bits.padCrtlStat = 0;
-		cdesc->peCrtlStat.bits.peReady = 0;
-		cdesc->srcAddr = srcAddr;
-		cdesc->dstAddr = dstAddr;
-		cdesc->saAddr = saRecord_base;
-		cdesc->stateAddr = saState_base;
-		cdesc->arc4Addr = (u32)areq;
-		cdesc->userId = MTK_DESC_ASYNC;
+		cdesc.srcAddr = srcAddr;
+		cdesc.dstAddr = dstAddr;
+		cdesc.peLength.bits.length = len;
+
 		if (n == 0)
 			if (complete == true) {
-				cdesc->userId |= MTK_DESC_LAST;
-				cdesc->userId |= MTK_DESC_FINISH;
+				cdesc.userId |= MTK_DESC_LAST;
+				cdesc.userId |= MTK_DESC_FINISH;
 				}
-		cdesc->peLength.bits.byPass = 0;
-		cdesc->peLength.bits.length = len;
-		cdesc->peLength.bits.hostReady = 1;
 
 		err = mtk_put_descriptor(mtk, cdesc);
 		if (err)
@@ -294,8 +296,6 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 
 		ndesc_cdr++;
 	} while (n);
-
-	kfree(cdesc);
 
 	return ndesc_cdr;
 }

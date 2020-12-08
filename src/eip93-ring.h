@@ -6,6 +6,6 @@
  */
 
 inline int mtk_put_descriptor(struct mtk_device *mtk,
-					struct eip93_descriptor_s *desc);
+					struct eip93_descriptor_s desc);
 
 inline void *mtk_get_descriptor(struct mtk_device *mtk);
