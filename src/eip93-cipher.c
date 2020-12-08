@@ -203,11 +203,14 @@ void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
  * For performance better to wait for hardware to perform multiple DMA
  *
  */
-inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
-			dma_addr_t saState_base, struct scatterlist *sgsrc,
-			struct scatterlist *sgdst, u32 datalen,  bool complete,
-			unsigned int *areq, int offsetin)
+inline int mtk_scatter_combine(struct mtk_device *mtk,
+ 			struct mtk_cipher_reqctx *rctx,
+			struct scatterlist *sgsrc, struct scatterlist *sgdst,
+			u32 datalen,  bool complete, unsigned int *areq,
+			int offsetin)
 {
+	dma_addr_t saRecord_base = rctx->saRecord_base;
+	dma_addr_t saState_base;
 	unsigned int remainin, remainout;
 	int offsetout = 0;
 	u32 n, len;
@@ -217,6 +220,11 @@ inline int mtk_scatter_combine(struct mtk_device *mtk, dma_addr_t saRecord_base,
 	bool nextout = false;
 	struct eip93_descriptor_s cdesc;
 	int ndesc_cdr = 0, err;
+
+	if (rctx->saState_ctr)
+		saState_base = rctx->saState_base_ctr;
+	else
+		saState_base = rctx->saState_base;
 
 	cdesc.peCrtlStat.word = 0;
 	cdesc.peCrtlStat.bits.hostReady = 1;
@@ -555,9 +563,8 @@ int mtk_send_req(struct crypto_async_request *base,
 		saState = rctx->saState_ctr;
 		saState_base = rctx->saState_base_ctr;
 		/* process until offset of the counter overflow */
-		ctr_cdr = mtk_scatter_combine(mtk, saRecord_base,
-				saState_base, src, dst, offset, complete,
-				(void *)base, 0);
+		ctr_cdr = mtk_scatter_combine(mtk, rctx, src, dst, offset,
+						complete, (void *)base, 0);
 		/* Jump to offset. */
 		src = scatterwalk_ffwd(rctx->ctr_src, src_ctr, offset);
 		dst = ((src_ctr == dst_ctr) ? src :
@@ -573,8 +580,7 @@ int mtk_send_req(struct crypto_async_request *base,
 			dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
 	}
 
-	ndesc_cdr = mtk_scatter_combine(mtk, saRecord_base,
-			saState_base, src, dst, datalen, complete,
+	ndesc_cdr = mtk_scatter_combine(mtk, rctx, src, dst, datalen, complete,
 			(void *)base, offsetin);
 
 	return ndesc_cdr + ctr_cdr;
