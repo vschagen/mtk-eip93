@@ -75,7 +75,7 @@ inline void *mtk_get_descriptor(struct mtk_device *mtk)
 	cdesc = mtk_ring_next_rptr(mtk, &mtk->ring->cdr);
 	if (IS_ERR(cdesc)) {
 		dev_err(mtk->dev, "Cant get Cdesc");
-		return PTR_ERR(-ENOENT);
+		return cdesc;
 	}
 
 	return mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
