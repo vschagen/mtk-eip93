@@ -69,12 +69,6 @@ struct mtk_ring {
 	bool				busy;
 };
 
-struct mtk_context {
-	void (*handle_result)(struct mtk_device *mtk,
-				struct crypto_async_request *req,
-				bool complete,  int err);
-};
-
 enum mtk_alg_type {
 	MTK_ALG_TYPE_SKCIPHER,
 	MTK_ALG_TYPE_AEAD,

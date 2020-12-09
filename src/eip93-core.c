@@ -55,10 +55,10 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_ecb_null,
 	&mtk_alg_authenc_hmac_sha224_ecb_null,
 	&mtk_alg_authenc_hmac_sha256_ecb_null,
-//	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
-//	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
-//	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
-//	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
+	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
+	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
+	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
+	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
 };
@@ -169,8 +169,6 @@ inline void mtk_push_request(struct mtk_device *mtk, int DescriptorPendingCount)
 static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 {
 	struct crypto_async_request *async = NULL;
-	struct mtk_context *ctx;
-	struct eip93_descriptor_s *cdesc;
 	struct eip93_descriptor_s *rdesc;
 	int handled = 0, nreq;
 	int try, ret, err = 0;
@@ -230,11 +228,16 @@ get_more:
 		if (flags & MTK_DESC_PRNG)
 			mtk_prng_done(mtk, err);
 
-		if (flags & MTK_DESC_ASYNC) {
+		if (flags & MTK_DESC_SKCIPHER) {
 			async = (struct crypto_async_request *)rdesc->arc4Addr;
-			ctx = crypto_tfm_ctx(async->tfm);
-			ctx->handle_result(mtk, async, complete, err);
+			mtk_skcipher_handle_result(mtk, async, complete, err);
 		}
+
+		if (flags & MTK_DESC_AEAD) {
+			async = (struct crypto_async_request *)rdesc->arc4Addr;
+			mtk_aead_handle_result(mtk, async, complete, err);
+		}
+
 	}
 
 	if (handled) {
@@ -250,7 +253,7 @@ get_more:
 		handled = 0;
 		goto get_more;
 	}
-push_request:
+
 	spin_lock(&mtk->ring->lock);
 	if (mtk->ring->requests)
 		mtk_push_request(mtk, mtk->ring->requests);
