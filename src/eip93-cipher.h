@@ -45,7 +45,6 @@ extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes;
 
 struct mtk_cipher_ctx {
-	struct mtk_context		base;
 	struct mtk_device		*mtk;
 	struct saRecord_s		*sa;
 	struct crypto_skcipher		*fallback;
@@ -78,4 +77,12 @@ struct mtk_cipher_reqctx {
 	/* request fallback, keep at the end */
 	struct skcipher_request		fallback_req;
 };
+
+void mtk_skcipher_handle_result(struct mtk_device *mtk,
+				struct crypto_async_request *async,
+				bool complete, int err);
+
+void mtk_aead_handle_result(struct mtk_device *mtk,
+			struct crypto_async_request *async,
+			bool complete,  int err);
 #endif /* _CIPHER_H_ */

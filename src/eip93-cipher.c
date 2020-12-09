@@ -4,7 +4,7 @@
  *
  * Richard van Schagen <vschagen@cs.com>
  */
-//#define DEBUG 1
+#define DEBUG 1
 #include <crypto/aead.h>
 #include <crypto/aes.h>
 #include <crypto/authenc.h>
@@ -193,7 +193,7 @@ void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 	/* Default for now, might be used for ESP offload */
 	saRecord->saCmd1.bits.seqNumCheck = 0;
 	saRecord->saSpi = 0x0;
-	saRecord->saSeqNumMask[0] = 0xFFFFFFFF;
+	saRecord->saSeqNumMask[0] = 0x0;
 	saRecord->saSeqNumMask[1] = 0x0;
 }
 
@@ -203,7 +203,7 @@ void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
  * For performance better to wait for hardware to perform multiple DMA
  *
  */
-int mtk_scatter_combine(struct mtk_device *mtk,
+inline int mtk_scatter_combine(struct mtk_device *mtk,
  			struct mtk_cipher_reqctx *rctx,
 			struct scatterlist *sgsrc, struct scatterlist *sgdst,
 			u32 datalen,  bool complete, unsigned int *areq,
@@ -235,7 +235,10 @@ int mtk_scatter_combine(struct mtk_device *mtk,
 	cdesc.saAddr = saRecord_base;
 	cdesc.stateAddr = saState_base;
 	cdesc.arc4Addr = (u32)areq;
-	cdesc.userId = MTK_DESC_ASYNC;
+	if (IS_HMAC(rctx->flags))
+		cdesc.userId = MTK_DESC_AEAD;
+	else
+		cdesc.userId = MTK_DESC_SKCIPHER;
 	cdesc.peLength.word = 0;
 	cdesc.peLength.bits.byPass = 0;
 	cdesc.peLength.bits.hostReady = 1;
@@ -327,7 +330,6 @@ int mtk_send_req(struct crypto_async_request *base,
 	struct scatterlist *dst, *dst_ctr;
 	struct saRecord_s *saRecord;
 	struct saState_s *saState;
-	dma_addr_t saState_base, saRecord_base;
 	u32 start, end, ctr, blocks;
 	unsigned long flags = rctx->flags;
 	bool overflow;
@@ -432,8 +434,9 @@ int mtk_send_req(struct crypto_async_request *base,
 	}
 
 	rctx->saState_ctr = NULL;
+	rctx->saState = NULL;
 
-	if (IS_ECB(flags)) {
+	if ((IS_ECB(flags)) || (IS_GENIV(flags))) {
 		rctx->iv_dma = false;
 		rctx->saState_base = NULL;
 		goto skip_iv;
@@ -499,27 +502,19 @@ int mtk_send_req(struct crypto_async_request *base,
 			memcpy(saState->stateIv, iv, rctx->ivsize);
 
 skip_iv:
-	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
-	 * implies __dma_cache_wback_inv
-	 */
-	dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
-	if (src != dst)
-		dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
-
 	rctx->saRecord = dma_pool_zalloc(mtk->saRecord_pool, GFP_KERNEL,
 					&rctx->saRecord_base);
 	if (!rctx->saRecord)
 		dev_err(mtk->dev, "No saRecord DMA memory\n");
 
 	saRecord = rctx->saRecord;
-	saRecord_base = rctx->saRecord_base;
 
 	memcpy(saRecord, ctx->sa, sizeof(struct saRecord_s));
 
 	if (IS_DECRYPT(flags))
 		saRecord->saCmd0.bits.direction = 1;
 
-	if (IS_ECB(flags))
+	if ((IS_ECB(flags)) || (IS_GENIV(flags)))
 		saRecord->saCmd0.bits.saveIv = 0;
 
 	if (IS_HMAC(flags)) {
@@ -537,6 +532,7 @@ skip_iv:
 	if (IS_GENIV(flags)) {
 		saRecord->saCmd0.bits.opCode = 0;
 		saRecord->saCmd0.bits.opGroup = 1;
+		saRecord->saCmd1.bits.seqNumCheck = 1;
 
 		if (IS_ENCRYPT(flags)) {
 			datalen = rctx->textsize - rctx->ivsize;
@@ -545,22 +541,30 @@ skip_iv:
 			 * header for now
 			 */
 			esph = sg_virt(rctx->sg_src);
-			saRecord->saSpi =  ntohl(esph[0]);
-			saRecord->saSeqNum[0] = ntohl(esph[1]);
+			saRecord->saSpi = ntohl(esph[0]);
+			saRecord->saSeqNum[0] = ntohl(esph[1]) - 1;
 			offsetin = rctx->assoclen + rctx->ivsize;
 			saRecord->saCmd1.bits.copyHeader = 0;
 			saRecord->saCmd0.bits.hdrProc = 1;
 			saRecord->saCmd0.bits.ivSource = 3;
 		} else {
+			esph = sg_virt(rctx->sg_src);
+			saRecord->saSpi = ntohl(esph[0]);
+			saRecord->saSeqNum[0] = ntohl(esph[1]);
 			saRecord->saCmd1.bits.copyHeader = 1;
-			/* dont process header for inbound since we
-			 * can't keep track of the SA for sequencing
-			 */
-			saRecord->saCmd0.bits.hdrProc = 0;
-			saRecord->saCmd0.bits.ivSource = 2;
+			saRecord->saCmd0.bits.hdrProc = 1;
+			saRecord->saCmd0.bits.ivSource = 1;
 			datalen += rctx->authsize;
 		}
 	}
+
+	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
+	 * implies __dma_cache_wback_inv
+	 */
+	dma_map_sg(mtk->dev, dst, sg_nents(dst), DMA_BIDIRECTIONAL);
+	if (src != dst)
+		dma_map_sg(mtk->dev, src, sg_nents(src), DMA_TO_DEVICE);
+
 
 	if (unlikely(complete == false)) {
 		src_ctr = src;
@@ -602,6 +606,7 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 
 	dma_unmap_sg(mtk->dev, rctx->sg_src, sg_nents(rctx->sg_src),
 							DMA_TO_DEVICE);
+
 	if (rctx->sg_src != reqsrc)
 		mtk_free_sg_cpy(len +  rctx->authsize, &rctx->sg_src);
 
@@ -611,7 +616,7 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	/* SHA tags need convertion from net-to-host */
 process_tag:
 	if (rctx->authsize) {
-		if (!IS_GENIV(rctx->flags) && IS_ENCRYPT(rctx->flags)) {
+		if ((IS_ENCRYPT(rctx->flags)) && (!IS_GENIV(rctx->flags))) {
 			if (!IS_HASH_MD5(rctx->flags)) {
 				otag = sg_virt(rctx->sg_dst) + len;
 				for (i = 0; i < (rctx->authsize / 4); i++)
@@ -647,9 +652,10 @@ void mtk_handle_result(struct mtk_device *mtk,
 		dma_unmap_single(mtk->dev, rctx->saState_base, rctx->ivsize,
 						DMA_BIDIRECTIONAL);
 	} else {
-		if (!IS_ECB(rctx->flags)) {
+		if ((!IS_ECB(rctx->flags)) || (!IS_GENIV(rctx->flags)))  {
 			memcpy(reqiv, rctx->saState->stateIv, rctx->ivsize);
-			dma_pool_free(mtk->saState_pool, rctx->saState,
+			if (rctx->saState)
+				dma_pool_free(mtk->saState_pool, rctx->saState,
 							rctx->saState_base);
 		}
 	}
@@ -714,7 +720,6 @@ static int mtk_skcipher_cra_init(struct crypto_tfm *tfm)
 			offsetof(struct mtk_cipher_reqctx, fallback_req));
 
 	ctx->mtk = tmpl->mtk;
-	ctx->base.handle_result = mtk_skcipher_handle_result;
 	ctx->aead = false;
 	ctx->sa = kzalloc(sizeof(struct saRecord_s), GFP_KERNEL);
 	if (!ctx->sa)
@@ -815,14 +820,14 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 		return ret;
 	}
 
+	if (mtk->ring->requests > MTK_RING_BUSY)
+		return -EAGAIN;
+
 	rctx->textsize = req->cryptlen;
 	rctx->authsize = 0;
 	rctx->assoclen = 0;
-	rctx->ivsize = ivsize;
 	rctx->iv_dma = true;
-
-	if (mtk->ring->requests > MTK_RING_BUSY)
-		return -EAGAIN;
+	rctx->ivsize = ivsize;
 
 	ret = mtk_send_req(base, ctx, req->src, req->dst, req->iv,
 				rctx);
@@ -899,7 +904,6 @@ static int mtk_aead_cra_init(struct crypto_tfm *tfm)
 
 	ctx->mtk = tmpl->mtk;
 	ctx->aead = true;
-	ctx->base.handle_result = mtk_aead_handle_result;
 	ctx->fallback = NULL;
 
 	ctx->sa = kzalloc(sizeof(struct saRecord_s), GFP_KERNEL);
@@ -1053,7 +1057,6 @@ static int mtk_aead_crypt(struct aead_request *req)
 	rctx->textsize = req->cryptlen;
 	rctx->assoclen = req->assoclen;
 	rctx->authsize = ctx->authsize;
-	rctx->ivsize = ivsize;
 	rctx->iv_dma = false;
 
 	if IS_DECRYPT(rctx->flags)
@@ -1064,6 +1067,12 @@ static int mtk_aead_crypt(struct aead_request *req)
 
 	if (mtk->ring->requests > MTK_RING_BUSY)
 		return -EAGAIN;
+
+	/* geniv for rfc3686 is seqiv which sets ivsize = 8 */
+	if ((IS_GENIV(rctx->flags) && (IS_RFC3686(rctx->flags))))
+		rctx->ivsize = 8;
+	else
+		rctx->ivsize = ivsize;
 
 	ret = mtk_send_req(base, ctx, req->src, req->dst, req->iv,
 				rctx);
@@ -1954,7 +1963,7 @@ struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes = {
 		.setauthsize = mtk_aead_setauthsize,
 		.maxauthsize = SHA1_DIGEST_SIZE,
 		.base = {
-			.cra_name = "seqiv(authenc(hmac(sha1),rfc3686(ctr(aes)))",
+			.cra_name = "seqiv(authenc(hmac(sha1),rfc3686(ctr(aes))))",
 			.cra_driver_name = "seqiv(authenc(hmac(sha1-eip93),"
 				"rfc3686(ctr(aes-eip93)))",
 			.cra_priority = MTK_CRA_PRIORITY,
@@ -1982,7 +1991,7 @@ struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes = {
 		.setauthsize = mtk_aead_setauthsize,
 		.maxauthsize = SHA256_DIGEST_SIZE,
 		.base = {
-			.cra_name = "seqiv(authenc(hmac(sha256),rfc3686(ctr(aes)))",
+			.cra_name = "seqiv(authenc(hmac(sha256),rfc3686(ctr(aes))))",
 			.cra_driver_name = "seqiv(authenc(hmac(sha256-eip93),"
 				"rfc3686(ctr(aes-eip93)))",
 			.cra_priority = MTK_CRA_PRIORITY,
