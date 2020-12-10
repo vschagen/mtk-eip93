@@ -19,22 +19,39 @@
 #include <crypto/internal/skcipher.h>
 #include <crypto/internal/hash.h>
 
+#ifdef CONFIG_EIP93_AES
+#include "eip93-aes.h"
+#endif
+#ifdef CONFIG_EIP93_DES
+#include "eip93-des.h"
+#endif
+#ifdef CONFIG_EIP93_AEAD
+#include "eip93-aead.h"
+#endif
+#ifdef CONFIG_EIP93_PRNG
+#include "eip93-prng.h"
+#endif
 #include "eip93-regs.h"
 #include "eip93-common.h"
-#include "eip93-core.h"
+#include "eip93-main.h"
 #include "eip93-ring.h"
 #include "eip93-cipher.h"
-#include "eip93-prng.h"
 
 static struct mtk_alg_template *mtk_algs[] = {
-	&mtk_alg_ecb_des,
-	&mtk_alg_cbc_des,
-	&mtk_alg_ecb_des3_ede,
-	&mtk_alg_cbc_des3_ede,
+#ifdef CONFIG_EIP93_AES
 	&mtk_alg_ecb_aes,
 	&mtk_alg_cbc_aes,
 	&mtk_alg_ctr_aes,
 	&mtk_alg_rfc3686_aes,
+#endif
+#ifdef CONFIG_EIP93_DES
+	&mtk_alg_ecb_des,
+	&mtk_alg_cbc_des,
+	&mtk_alg_ecb_des3_ede,
+	&mtk_alg_cbc_des3_ede,
+#endif
+#ifdef CONFIG_EIP93_AEAD
+#ifdef CONFIG_EIP93_DES
 	&mtk_alg_authenc_hmac_md5_cbc_des,
 	&mtk_alg_authenc_hmac_sha1_cbc_des,
 	&mtk_alg_authenc_hmac_sha224_cbc_des,
@@ -43,6 +60,12 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
+	&mtk_alg_authenc_hmac_md5_ecb_null,
+	&mtk_alg_authenc_hmac_sha1_ecb_null,
+	&mtk_alg_authenc_hmac_sha224_ecb_null,
+	&mtk_alg_authenc_hmac_sha256_ecb_null,
+	&mtk_alg_echainiv_authenc_hmac_md5_cbc_des,
+#endif
 	&mtk_alg_authenc_hmac_md5_cbc_aes,
 	&mtk_alg_authenc_hmac_sha1_cbc_aes,
 	&mtk_alg_authenc_hmac_sha224_cbc_aes,
@@ -51,17 +74,17 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
-	&mtk_alg_authenc_hmac_md5_ecb_null,
-	&mtk_alg_authenc_hmac_sha1_ecb_null,
-	&mtk_alg_authenc_hmac_sha224_ecb_null,
-	&mtk_alg_authenc_hmac_sha256_ecb_null,
-	&mtk_alg_echainiv_authenc_hmac_md5_cbc_des,
+#ifdef CONFIG_EIP93_PRNG
 	&mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes,
 	&mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes,
-//	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
-//	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
+	&mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes,
+	&mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes,
+#endif
+#endif
+#ifdef CONFIG_EIP93_PRNG
 //	&mtk_alg_prng,
 //	&mtk_alg_cprng,
+#endif
 };
 
 static void mtk_unregister_algs(struct mtk_device *mtk, int i)
@@ -226,19 +249,22 @@ get_more:
 
 	if (last_entry) {
 		last_entry = false;
+#ifdef CONFIG_EIP93_PRNG
 		if (flags & MTK_DESC_PRNG)
 			mtk_prng_done(mtk, err);
-
+#endif
+#ifdef CONFIG_EIP93_SKCIPHER
 		if (flags & MTK_DESC_SKCIPHER) {
 			async = (struct crypto_async_request *)rdesc->arc4Addr;
 			mtk_skcipher_handle_result(mtk, async, complete, err);
 		}
-
+#endif
+#ifdef CONFIG_EIP93_AEAD
 		if (flags & MTK_DESC_AEAD) {
 			async = (struct crypto_async_request *)rdesc->arc4Addr;
 			mtk_aead_handle_result(mtk, async, complete, err);
 		}
-
+#endif
 	}
 
 	if (handled) {
@@ -511,12 +537,13 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 	/* Init. finished, enable RDR interupt */
 	mtk_irq_enable(mtk, BIT(1));
 
+#ifdef CONFIG_EIP93_PRNG
 	ret = mtk_prng_init(mtk, true);
 	if (ret)
 		dev_info(mtk->dev, "PRNG initialized");
 	else
 		dev_err(mtk->dev, "Could not initialize PRNG");
-
+#endif
 	ret = mtk_register_algs(mtk);
 
 	dev_info(mtk->dev, "EIP93 initialized succesfull\n");

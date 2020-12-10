@@ -7,44 +7,6 @@
 #ifndef _CIPHER_H_
 #define _CIPHER_H_
 
-extern struct mtk_alg_template mtk_alg_ecb_aes;
-extern struct mtk_alg_template mtk_alg_cbc_aes;
-extern struct mtk_alg_template mtk_alg_ctr_aes;
-extern struct mtk_alg_template mtk_alg_rfc3686_aes;
-extern struct mtk_alg_template mtk_alg_ecb_des;
-extern struct mtk_alg_template mtk_alg_cbc_des;
-extern struct mtk_alg_template mtk_alg_ecb_des3_ede;
-extern struct mtk_alg_template mtk_alg_cbc_des3_ede;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_ctr_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ctr_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ctr_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ctr_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_rfc3686_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_rfc3686_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_rfc3686_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des3_ede;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des3_ede;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des3_ede;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des3_ede;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_ecb_null;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ecb_null;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ecb_null;
-extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null;
-extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des;
-extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes;
-extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes;
-extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes;
-extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes;
-
 struct mtk_cipher_ctx {
 	struct mtk_device		*mtk;
 	struct saRecord_s		*sa;
@@ -78,12 +40,4 @@ struct mtk_cipher_reqctx {
 	/* request fallback, keep at the end */
 	struct skcipher_request		fallback_req;
 };
-
-void mtk_skcipher_handle_result(struct mtk_device *mtk,
-				struct crypto_async_request *async,
-				bool complete, int err);
-
-void mtk_aead_handle_result(struct mtk_device *mtk,
-			struct crypto_async_request *async,
-			bool complete,  int err);
 #endif /* _CIPHER_H_ */

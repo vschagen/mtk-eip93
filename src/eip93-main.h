@@ -4,8 +4,8 @@
  *
  * Richard van Schagen <vschagen@cs.com>
  */
-#ifndef _CORE_H_
-#define _CORE_H_
+#ifndef _MAIN_H_
+#define _MAIN_H_
 
 #include <linux/atomic.h>
 #include <linux/completion.h>
@@ -88,4 +88,4 @@ struct mtk_alg_template {
 	} alg;
 };
 
-#endif /* _CORE_H_ */
+#endif /* _MAIN_H_ */

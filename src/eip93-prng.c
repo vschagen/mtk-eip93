@@ -6,7 +6,7 @@
  */
 
 #include "eip93-common.h"
-#include "eip93-core.h"
+#include "eip93-main.h"
 #include "eip93-regs.h"
 #include "eip93-ring.h"
 #include "eip93-prng.h"

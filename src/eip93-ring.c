@@ -6,7 +6,7 @@
  */
 
 #include "eip93-common.h"
-#include "eip93-core.h"
+#include "eip93-main.h"
 
 inline void *mtk_ring_next_wptr(struct mtk_device *mtk,
 						struct mtk_desc_ring *ring)

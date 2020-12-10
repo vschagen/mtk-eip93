@@ -8,7 +8,15 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+#include <crypto/internal/aead.h>
+#include <crypto/internal/des.h>
+#include <crypto/internal/skcipher.h>
+
 #include <linux/bits.h>
+#include <linux/types.h>
+#include <linux/scatterlist.h>
+
+#include "eip93-cipher.h"
 
 #define MTK_RING_SIZE			256
 #define MTK_RING_BUSY			224
@@ -198,5 +206,25 @@ typedef struct eip93_descriptor_s {
 	unsigned int		userId;
 	peLength_t		peLength;
 } eip93_descriptor_t;
+
+void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
+				const u32 nonce, const unsigned int keylen,
+				const unsigned long flags);
+
+int mtk_send_req(struct crypto_async_request *base,
+			const struct mtk_cipher_ctx *ctx,
+			struct scatterlist *reqsrc, struct scatterlist *reqdst,
+			const u8 *reqiv, struct mtk_cipher_reqctx *rctx);
+
+void mtk_handle_result(struct mtk_device *mtk,
+	struct crypto_async_request *async, struct mtk_cipher_reqctx *rctx,
+	struct scatterlist *reqsrc, struct scatterlist *reqdst,	u8 *reqiv,
+	bool complete, int err);
+
+#ifdef CONFIG_EIP93_SKCIPHER
+void mtk_skcipher_handle_result(struct mtk_device *mtk,
+				struct crypto_async_request *async,
+				bool complete, int err);
+#endif
 
 #endif /* _COMMON_H_ */
