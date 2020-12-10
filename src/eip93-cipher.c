@@ -1058,6 +1058,7 @@ static int mtk_aead_crypt(struct aead_request *req)
 	rctx->assoclen = req->assoclen;
 	rctx->authsize = ctx->authsize;
 	rctx->iv_dma = false;
+	rctx->ivsize = ivsize;
 
 	if IS_DECRYPT(rctx->flags)
 		rctx->textsize -= rctx->authsize;
@@ -1067,12 +1068,6 @@ static int mtk_aead_crypt(struct aead_request *req)
 
 	if (mtk->ring->requests > MTK_RING_BUSY)
 		return -EAGAIN;
-
-	/* geniv for rfc3686 is seqiv which sets ivsize = 8 */
-	if ((IS_GENIV(rctx->flags) && (IS_RFC3686(rctx->flags))))
-		rctx->ivsize = 8;
-	else
-		rctx->ivsize = ivsize;
 
 	ret = mtk_send_req(base, ctx, req->src, req->dst, req->iv,
 				rctx);
@@ -1888,6 +1883,34 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null = {
 			.cra_blocksize = NULL_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
 			.cra_alignmask = 0x0,
+			.cra_init = mtk_aead_cra_init,
+			.cra_exit = mtk_aead_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+
+struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des = {
+	.type = MTK_ALG_TYPE_AEAD,
+	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC |
+			MTK_ALG_DES | MTK_GENIV,
+	.alg.aead = {
+		.setkey = mtk_aead_setkey,
+		.encrypt = mtk_aead_encrypt,
+		.decrypt = mtk_aead_decrypt,
+		.ivsize	= DES_BLOCK_SIZE,
+		.setauthsize = mtk_aead_setauthsize,
+		.maxauthsize = MD5_DIGEST_SIZE,
+		.base = {
+			.cra_name = "echainiv(authenc(hmac(md5),cbc(des)))",
+			.cra_driver_name = "echainiv(authenc(hmac(md5-eip93)"
+					",cbc(des-eip93))",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = DES_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_cipher_ctx),
+			.cra_alignmask = 0,
 			.cra_init = mtk_aead_cra_init,
 			.cra_exit = mtk_aead_cra_exit,
 			.cra_module = THIS_MODULE,
