@@ -11,9 +11,6 @@
 #include <crypto/authenc.h>
 #include <crypto/ctr.h>
 #include <crypto/hmac.h>
-//#include <crypto/internal/aead.h>
-//#include <crypto/internal/des.h>
-//#include <crypto/internal/skcipher.h>
 #include <crypto/md5.h>
 #include <crypto/null.h>
 #include <crypto/scatterwalk.h>
@@ -113,7 +110,7 @@ static inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len, const int 
 	return false;
 }
 
-void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
+void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, u8 *key,
 				const u32 nonce, const unsigned int keylen,
 				const unsigned long flags)
 {

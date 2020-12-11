@@ -52,31 +52,31 @@ static int mtk_des_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	unsigned long flags = tmpl->flags;
 	unsigned int keylen = len;
 	u32 nonce = 0;
-	int ret = 0;
+	int err = 0;
 
 	if (!key || !keylen)
 		return -EINVAL;
 
 	switch ((flags & MTK_ALG_MASK)) {
 	case MTK_ALG_DES:
-		ret = verify_skcipher_des_key(ctfm, key);
+		err = verify_skcipher_des_key(ctfm, key);
 		break;
 	case MTK_ALG_3DES:
 		if (keylen != DES3_EDE_KEY_SIZE) {
-			ret = -EINVAL;
+			err = -EINVAL;
 			break;
 		}
-		ret = verify_skcipher_des3_key(ctfm, key);
+		err = verify_skcipher_des3_key(ctfm, key);
 	}
 
-	if (ret) {
+	if (err) {
 		crypto_skcipher_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
-		return ret;
+		return err;
 	}
 
 	mtk_ctx_saRecord(ctx, key, nonce, keylen, flags);
 
-	return ret;
+	return err;
 }
 
 static int mtk_des_crypt(struct skcipher_request *req)

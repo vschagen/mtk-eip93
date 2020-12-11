@@ -90,29 +90,28 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	struct crypto_aes_ctx aes;
 	unsigned int keylen = len;
 	u32 nonce = 0;
-	int ret = 0;
-
-	if (!key || !keylen)
-		return -EINVAL;
+	int err = 0;
 
 	if (IS_RFC3686(flags)) {
-		/* last 4 bytes of key are the nonce! */
-		keylen -= CTR_RFC3686_NONCE_SIZE;
+		if (len < CTR_RFC3686_NONCE_SIZE)
+			return -EINVAL;
+
+		keylen = len - CTR_RFC3686_NONCE_SIZE;
 		memcpy(&nonce, key + keylen, CTR_RFC3686_NONCE_SIZE);
 	}
 
-	ret = aes_expandkey(&aes, key, keylen);
-	if (ret) {
+	err = aes_expandkey(&aes, key, keylen);
+	if (err) {
 		crypto_skcipher_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
-		return ret;
+		return err;
 	}
 
 	mtk_ctx_saRecord(ctx, key, nonce, keylen, flags);
 
 	if (ctx->fallback)
-		ret = crypto_skcipher_setkey(ctx->fallback, key, len);
+		err = crypto_skcipher_setkey(ctx->fallback, key, len);
 
-	return ret;
+	return err;
 }
 
 static int mtk_skcipher_crypt(struct skcipher_request *req)

@@ -27,7 +27,6 @@
 #include "eip93-regs.h"
 #include "eip93-ring.h"
 
-
 void mtk_aead_handle_result(struct mtk_device *mtk,
 				struct crypto_async_request *async,
 				bool complete,  int err)
@@ -93,7 +92,7 @@ static void mtk_aead_cra_exit(struct crypto_tfm *tfm)
 }
 
 static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
-			unsigned int keylen)
+			unsigned int len)
 {
 	struct crypto_tfm *tfm = crypto_aead_tfm(ctfm);
 	struct mtk_cipher_ctx *ctx = crypto_tfm_ctx(tfm);
@@ -101,26 +100,44 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 				struct mtk_alg_template, alg.skcipher.base);
 	unsigned long flags = tmpl->flags;
 	struct crypto_authenc_keys keys;
+	struct crypto_aes_ctx aes;
 	int bs = crypto_shash_blocksize(ctx->shash);
 	int ds = crypto_shash_digestsize(ctx->shash);
 	u8 *ipad, *opad;
-	unsigned int i, err;
+	unsigned int i, err = -EINVAL;
 	u32 nonce;
 
 	SHASH_DESC_ON_STACK(shash, ctx->shash);
 
-	if (crypto_authenc_extractkeys(&keys, key, keylen) != 0)
+	if (crypto_authenc_extractkeys(&keys, key, len))
 		goto badkey;
 
 	if (IS_RFC3686(flags)) {
-		if (keylen < CTR_RFC3686_NONCE_SIZE)
-			return -EINVAL;
+		if (keys.enckeylen < CTR_RFC3686_NONCE_SIZE)
+			goto badkey;
 
-		keylen -= CTR_RFC3686_NONCE_SIZE;
-		memcpy(&nonce, key + keylen, CTR_RFC3686_NONCE_SIZE);
+		keys.enckeylen -= CTR_RFC3686_NONCE_SIZE;
+		memcpy(&nonce, keys.enckey + keys.enckeylen,
+						CTR_RFC3686_NONCE_SIZE);
 	}
 
-	if (keys.enckeylen > AES_MAX_KEY_SIZE)
+	switch ((flags & MTK_ALG_MASK)) {
+#ifdef CONFIG_EIP93_DES
+	case MTK_ALG_DES:
+		err = verify_aead_des_key(ctfm, keys.enckey, keys.enckeylen);
+		break;
+	case MTK_ALG_3DES:
+		if (keys.enckeylen != DES3_EDE_KEY_SIZE) {
+			err = -EINVAL;
+			break;
+		}
+		err = verify_aead_des3_key(ctfm, keys.enckey, keys.enckeylen);
+		break;
+#endif
+	case MTK_ALG_AES:
+		err = aes_expandkey(&aes, keys.enckey, keys.enckeylen);
+	}
+	if (err)
 		goto badkey;
 
 	/* auth key
@@ -140,7 +157,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 		err = crypto_shash_digest(shash, keys.authkey,
 					keys.authkeylen, ipad);
 		if (err)
-			return err;
+			goto badkey;
 
 		keys.authkeylen = ds;
 	} else
@@ -162,7 +179,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 				 crypto_shash_export(shash, opad);
 
 	if (err)
-		return err;
+		goto badkey;
 
 	/* Encryption key */
 	mtk_ctx_saRecord(ctx, keys.enckey, nonce, keys.enckeylen, flags);
@@ -174,6 +191,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	return err;
 
 badkey:
+	kfree(ipad);
 	crypto_aead_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
 	return -EINVAL;
 }
@@ -502,6 +520,7 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes = {
 	},
 };
 
+#ifdef CONFIG_EIP93_PRNG
 struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes = {
 	.type = MTK_ALG_TYPE_AEAD,
 	.flags = MTK_HASH_HMAC | MTK_HASH_SHA1 | MTK_MODE_CBC |
@@ -613,6 +632,7 @@ struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes = {
 		},
 	},
 };
+#endif
 
 #ifdef CONFIG_EIP93_DES
 struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des = {
@@ -938,7 +958,7 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null = {
 		},
 	},
 };
-
+#ifdef CONFIG_EIP93_PRNG
 struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des = {
 	.type = MTK_ALG_TYPE_AEAD,
 	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC |
@@ -966,4 +986,5 @@ struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des = {
 		},
 	},
 };
+#endif
 #endif
