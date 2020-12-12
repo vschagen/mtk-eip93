@@ -10,7 +10,7 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=mtk-eip93
-PKG_RELEASE:=1.2
+PKG_RELEASE:=1.3
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -53,6 +53,8 @@ config CRYPTO_EIP93_DES
 	bool "Register legacy DES / 3DES algorithm with the Crypto API"
 	default y
 	select CRYPTO_BLKCIPHER
+	select CRYPTO_CBC
+	select CRYPTO_ECB
 	select CRYPTO_LIB_DES
 	help
 	  Selecting this will offload DES and 3DES ECB and CBC
