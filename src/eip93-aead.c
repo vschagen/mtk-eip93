@@ -91,6 +91,66 @@ static void mtk_aead_cra_exit(struct crypto_tfm *tfm)
 	kfree(ctx->sa);
 }
 
+/* basically this is set hmac - key */
+static int mtk_authenc_setkey(struct mtk_cipher_ctx *ctx, const u8 *authkey,
+							unsigned int authkeylen)
+{
+	int bs = crypto_shash_blocksize(ctx->shash);
+	int ds = crypto_shash_digestsize(ctx->shash);
+	u8 *ipad, *opad;
+	unsigned int i, err;
+
+	SHASH_DESC_ON_STACK(shash, ctx->shash);
+
+	shash->tfm = ctx->shash;
+
+	/* auth key
+	 *
+	 * EIP93 can only authenticate with hash of the key
+	 * do software shash until EIP93 hash function complete.
+	 */
+	ipad = kcalloc(2, SHA512_BLOCK_SIZE, GFP_KERNEL);
+	if (!ipad)
+		return -ENOMEM;
+
+	opad = ipad + SHA512_BLOCK_SIZE;
+
+	if (authkeylen > bs) {
+		err = crypto_shash_digest(shash, authkey,
+					authkeylen, ipad);
+		if (err)
+			return err;
+
+		authkeylen = ds;
+	} else
+		memcpy(ipad, authkey, authkeylen);
+
+	memset(ipad + authkeylen, 0, bs - authkeylen);
+	memcpy(opad, ipad, bs);
+
+	for (i = 0; i < bs; i++) {
+		ipad[i] ^= HMAC_IPAD_VALUE;
+		opad[i] ^= HMAC_OPAD_VALUE;
+	}
+
+	err = crypto_shash_init(shash) ?:
+				 crypto_shash_update(shash, ipad, bs) ?:
+				 crypto_shash_export(shash, ipad) ?:
+				 crypto_shash_init(shash) ?:
+				 crypto_shash_update(shash, opad, bs) ?:
+				 crypto_shash_export(shash, opad);
+
+	if (err)
+		return err;
+
+	/* add auth key */
+	memcpy(&ctx->sa->saIDigest, ipad, SHA256_DIGEST_SIZE);
+	memcpy(&ctx->sa->saODigest, opad, SHA256_DIGEST_SIZE);
+
+	kfree(ipad);
+	return 0;
+}
+
 static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 			unsigned int len)
 {
@@ -101,16 +161,13 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	unsigned long flags = tmpl->flags;
 	struct crypto_authenc_keys keys;
 	struct crypto_aes_ctx aes;
-	int bs = crypto_shash_blocksize(ctx->shash);
-	int ds = crypto_shash_digestsize(ctx->shash);
-	u8 *ipad, *opad;
-	unsigned int i, err = -EINVAL;
+	unsigned err = 0;
 	u32 nonce;
 
-	SHASH_DESC_ON_STACK(shash, ctx->shash);
-
-	if (crypto_authenc_extractkeys(&keys, key, len))
+	if (crypto_authenc_extractkeys(&keys, key, len)) {
+		err = -EINVAL;
 		goto badkey;
+	}
 
 	if (IS_RFC3686(flags)) {
 		if (keys.enckeylen < CTR_RFC3686_NONCE_SIZE)
@@ -140,58 +197,16 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	if (err)
 		goto badkey;
 
-	/* auth key
-	 *
-	 * EIP93 can only authenticate with hash of the key
-	 * do software shash until EIP93 hash function complete.
-	 */
-	ipad = kcalloc(2, SHA512_BLOCK_SIZE, GFP_KERNEL);
-	if (!ipad)
-		return -ENOMEM;
-
-	opad = ipad + SHA512_BLOCK_SIZE;
-
-	shash->tfm = ctx->shash;
-
-	if (keys.authkeylen > bs) {
-		err = crypto_shash_digest(shash, keys.authkey,
-					keys.authkeylen, ipad);
-		if (err)
-			goto badkey;
-
-		keys.authkeylen = ds;
-	} else
-		memcpy(ipad, keys.authkey, keys.authkeylen);
-
-	memset(ipad + keys.authkeylen, 0, bs - keys.authkeylen);
-	memcpy(opad, ipad, bs);
-
-	for (i = 0; i < bs; i++) {
-		ipad[i] ^= HMAC_IPAD_VALUE;
-		opad[i] ^= HMAC_OPAD_VALUE;
-	}
-
-	err = crypto_shash_init(shash) ?:
-				 crypto_shash_update(shash, ipad, bs) ?:
-				 crypto_shash_export(shash, ipad) ?:
-				 crypto_shash_init(shash) ?:
-				 crypto_shash_update(shash, opad, bs) ?:
-				 crypto_shash_export(shash, opad);
-
-	if (err)
-		goto badkey;
-
 	/* Encryption key */
 	mtk_ctx_saRecord(ctx, keys.enckey, nonce, keys.enckeylen, flags);
-	/* add auth key */
-	memcpy(&ctx->sa->saIDigest, ipad, SHA256_DIGEST_SIZE);
-	memcpy(&ctx->sa->saODigest, opad, SHA256_DIGEST_SIZE);
+	/* authentication key */
+	err = mtk_authenc_setkey(ctx, keys.authkey, keys.authkeylen);
+	if (!err)
+		return 0;
 
-	kfree(ipad);
 	return err;
 
 badkey:
-	kfree(ipad);
 	crypto_aead_set_flags(ctfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
 	return -EINVAL;
 }
@@ -850,7 +865,7 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des3_ede = {
 		},
 	},
 };
-/* Single pass IPSEC ESP descriptor */
+
 struct mtk_alg_template mtk_alg_authenc_hmac_md5_ecb_null = {
 	.type = MTK_ALG_TYPE_AEAD,
 	.flags = MTK_HASH_HMAC | MTK_HASH_MD5,

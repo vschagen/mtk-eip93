@@ -23,12 +23,13 @@ extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes;
+#ifdef CONFIG_EIP93_PRNG
 extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha1_cbc_aes;
 extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_sha256_cbc_aes;
 extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha1_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_seqiv_authenc_hmac_sha256_rfc3686_aes;
+#endif
 #ifdef CONFIG_EIP93_DES
-extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des;
@@ -41,6 +42,9 @@ extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_ecb_null;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_ecb_null;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_ecb_null;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_ecb_null;
+#ifdef CONFIG_EIP93_PRNG
+extern struct mtk_alg_template mtk_alg_echainiv_authenc_hmac_md5_cbc_des;
+#endif
 #endif
 
 void mtk_aead_handle_result(struct mtk_device *mtk,
