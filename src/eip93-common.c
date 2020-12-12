@@ -110,7 +110,7 @@ static inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len, const int 
 	return false;
 }
 
-void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, u8 *key,
+void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 				const u32 nonce, const unsigned int keylen,
 				const unsigned long flags)
 {
@@ -123,7 +123,6 @@ void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, u8 *key,
 	saRecord->saCmd0.bits.opGroup = 0;
 	saRecord->saCmd0.bits.opCode = 0;
 
-	saRecord->saCmd0.bits.cipher = 15;
 	switch ((flags & MTK_ALG_MASK)) {
 	case MTK_ALG_AES:
 		saRecord->saCmd0.bits.cipher = 3;
@@ -135,9 +134,10 @@ void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, u8 *key,
 	case MTK_ALG_DES:
 		saRecord->saCmd0.bits.cipher = 0;
 		break;
+	default:
+		saRecord->saCmd0.bits.cipher = 15;
 	}
 
-	saRecord->saCmd0.bits.hash = 15;
 	switch ((flags & MTK_HASH_MASK)) {
 	case MTK_HASH_SHA256:
 		saRecord->saCmd0.bits.hash = 3;
@@ -151,6 +151,8 @@ void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, u8 *key,
 	case MTK_HASH_MD5:
 		saRecord->saCmd0.bits.hash = 0;
 		break;
+	default:
+		saRecord->saCmd0.bits.hash = 15;
 	}
 
 	saRecord->saCmd0.bits.hdrProc = 0;
@@ -530,8 +532,8 @@ skip_iv:
 	}
 
 	if (IS_GENIV(flags)) {
-		saRecord->saCmd0.bits.opCode = 0;
 		saRecord->saCmd0.bits.opGroup = 1;
+		saRecord->saCmd0.bits.opCode = 0;
 		saRecord->saCmd1.bits.seqNumCheck = 1;
 
 		if (IS_ENCRYPT(flags)) {
@@ -545,6 +547,7 @@ skip_iv:
 			saRecord->saSeqNum[0] = ntohl(esph[1]) - 1;
 			offsetin = rctx->assoclen + rctx->ivsize;
 			saRecord->saCmd1.bits.copyHeader = 0;
+			saRecord->saCmd1.bits.copyDigest = 0;
 			saRecord->saCmd0.bits.hdrProc = 1;
 			saRecord->saCmd0.bits.ivSource = 3;
 		} else {
@@ -552,6 +555,7 @@ skip_iv:
 			saRecord->saSpi = ntohl(esph[0]);
 			saRecord->saSeqNum[0] = ntohl(esph[1]);
 			saRecord->saCmd1.bits.copyHeader = 1;
+			saRecord->saCmd1.bits.copyDigest = 0;
 			saRecord->saCmd0.bits.hdrProc = 1;
 			saRecord->saCmd0.bits.ivSource = 1;
 			datalen += rctx->authsize;
@@ -595,6 +599,8 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 			struct scatterlist *reqsrc, struct scatterlist *reqdst)
 {
 	u32 len = rctx->assoclen + rctx->textsize;
+	u32 authsize = rctx->authsize;
+	u32 flags = rctx->flags;
 	u32 *otag;
 	int i;
 
@@ -613,21 +619,22 @@ static void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx
 	dma_unmap_sg(mtk->dev, rctx->sg_dst, sg_nents(rctx->sg_dst),
 							DMA_FROM_DEVICE);
 
-	/* SHA tags need convertion from net-to-host */
+	/* SHA tags need conversion from net-to-host */
 process_tag:
-	if (rctx->authsize) {
-		if ((IS_ENCRYPT(rctx->flags)) && (!IS_GENIV(rctx->flags))) {
-			if (!IS_HASH_MD5(rctx->flags)) {
-				otag = sg_virt(rctx->sg_dst) + len;
-				for (i = 0; i < (rctx->authsize / 4); i++)
-					otag[i] = ntohl(otag[i]);
-			}
+	if (IS_DECRYPT(flags))
+		authsize = 0;
+
+	if (authsize && (!IS_GENIV(flags))) {
+		if (!IS_HASH_MD5(flags)) {
+			otag = sg_virt(rctx->sg_dst) + len;
+			for (i = 0; i < (authsize / 4); i++)
+			otag[i] = ntohl(otag[i]);
 		}
 	}
 
 	if (rctx->sg_dst != reqdst) {
 		sg_copy_from_buffer(reqdst, sg_nents(reqdst),
-				sg_virt(rctx->sg_dst), len + rctx->authsize);
+				sg_virt(rctx->sg_dst), len + authsize);
 		mtk_free_sg_cpy(len + rctx->authsize, &rctx->sg_dst);
 	}
 }

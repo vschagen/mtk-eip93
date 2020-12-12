@@ -207,7 +207,7 @@ typedef struct eip93_descriptor_s {
 	peLength_t		peLength;
 } eip93_descriptor_t;
 
-void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, u8 *key,
+void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
 				const u32 nonce, const unsigned int keylen,
 				const unsigned long flags);
 
