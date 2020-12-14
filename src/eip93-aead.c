@@ -92,17 +92,17 @@ static void mtk_aead_cra_exit(struct crypto_tfm *tfm)
 }
 
 /* basically this is set hmac - key */
-static int mtk_authenc_setkey(struct mtk_cipher_ctx *ctx, const u8 *authkey,
-							unsigned int authkeylen)
+int mtk_authenc_setkey(struct crypto_shash *cshash, struct saRecord_s *sa,
+			const u8 *authkey, unsigned int authkeylen)
 {
-	int bs = crypto_shash_blocksize(ctx->shash);
-	int ds = crypto_shash_digestsize(ctx->shash);
+	int bs = crypto_shash_blocksize(cshash);
+	int ds = crypto_shash_digestsize(cshash);
 	u8 *ipad, *opad;
 	unsigned int i, err;
 
-	SHASH_DESC_ON_STACK(shash, ctx->shash);
+	SHASH_DESC_ON_STACK(shash, cshash);
 
-	shash->tfm = ctx->shash;
+	shash->tfm = cshash;
 
 	/* auth key
 	 *
@@ -144,8 +144,8 @@ static int mtk_authenc_setkey(struct mtk_cipher_ctx *ctx, const u8 *authkey,
 		return err;
 
 	/* add auth key */
-	memcpy(&ctx->sa->saIDigest, ipad, SHA256_DIGEST_SIZE);
-	memcpy(&ctx->sa->saODigest, opad, SHA256_DIGEST_SIZE);
+	memcpy(&sa->saIDigest, ipad, SHA256_DIGEST_SIZE);
+	memcpy(&sa->saODigest, opad, SHA256_DIGEST_SIZE);
 
 	kfree(ipad);
 	return 0;
@@ -198,9 +198,10 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 		goto badkey;
 
 	/* Encryption key */
-	mtk_ctx_saRecord(ctx, keys.enckey, nonce, keys.enckeylen, flags);
+	mtk_set_saRecord(ctx->sa, keys.enckey, nonce, keys.enckeylen, flags);
 	/* authentication key */
-	err = mtk_authenc_setkey(ctx, keys.authkey, keys.authkeylen);
+	err = mtk_authenc_setkey(ctx->shash, ctx->sa, keys.authkey,
+							keys.authkeylen);
 	if (!err)
 		return 0;
 

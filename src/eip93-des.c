@@ -74,7 +74,7 @@ static int mtk_des_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 		return err;
 	}
 
-	mtk_ctx_saRecord(ctx, key, nonce, keylen, flags);
+	mtk_set_saRecord(ctx->sa, key, nonce, keylen, flags);
 
 	return err;
 }

@@ -51,4 +51,7 @@ void mtk_aead_handle_result(struct mtk_device *mtk,
 				struct crypto_async_request *async,
 				bool complete,  int err);
 
+int mtk_authenc_setkey(struct crypto_shash *cshash, struct saRecord_s *sa,
+			const u8 *authkey, unsigned int authkeylen);
+
 #endif /* _CIPHER_AEAD_H_ */

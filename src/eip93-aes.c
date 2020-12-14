@@ -106,7 +106,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 		return err;
 	}
 
-	mtk_ctx_saRecord(ctx, key, nonce, keylen, flags);
+	mtk_set_saRecord(ctx->sa, key, nonce, keylen, flags);
 
 	if (ctx->fallback)
 		err = crypto_skcipher_setkey(ctx->fallback, key, len);

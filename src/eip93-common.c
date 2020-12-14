@@ -110,14 +110,10 @@ static inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len, const int 
 	return false;
 }
 
-void mtk_ctx_saRecord(struct mtk_cipher_ctx *ctx, const u8 *key,
+void mtk_set_saRecord(struct saRecord_s *saRecord, const u8 *key,
 				const u32 nonce, const unsigned int keylen,
 				const unsigned long flags)
 {
-	struct saRecord_s *saRecord;
-
-	saRecord = ctx->sa;
-
 	saRecord->saCmd0.bits.ivSource = 2;
 	saRecord->saCmd0.bits.saveIv = 1;
 	saRecord->saCmd0.bits.opGroup = 0;
