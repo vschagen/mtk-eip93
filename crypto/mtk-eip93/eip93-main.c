@@ -352,8 +352,6 @@ static int mtk_desc_init(struct mtk_device *mtk,
 	if (!mtk->ring->saState)
 		return -ENOMEM;
 
-	dev_dbg(mtk->dev, "State Pool dma: %08X\n", mtk->ring->saState_dma);
-
 	mtk->ring->saState_pool = devm_kcalloc(mtk->dev, 1,
 				sizeof(struct mtk_state_pool) * MTK_RING_SIZE,
 				GFP_KERNEL);
@@ -390,11 +388,8 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	mtk->irq = platform_get_irq(pdev, 0);
 
-	if (mtk->irq < 0) {
-		dev_dbg(mtk->dev, "Cannot get IRQ resource\n");
+	if (mtk->irq < 0)
 		return mtk->irq;
-	}
-	dev_dbg(mtk->dev, "Assigning IRQ: %d", mtk->irq);
 
 	ret = devm_request_threaded_irq(mtk->dev, mtk->irq, mtk_irq_handler,
 					NULL, IRQF_ONESHOT,
