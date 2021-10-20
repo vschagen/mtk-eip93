@@ -115,7 +115,7 @@ static int mtk_des_crypt(struct skcipher_request *req)
 	struct crypto_async_request *async = &req->base;
 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
 	struct crypto_skcipher *skcipher = crypto_skcipher_reqtfm(req);
-	int ret;
+
 #ifdef CONFIG_CRYPTO_DEV_EIP93_POLL
 	struct mtk_device *mtk = ctx->mtk;
 #endif

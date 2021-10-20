@@ -269,7 +269,6 @@ static int mtk_aead_crypt(struct aead_request *req)
 	struct crypto_async_request *async = &req->base;
 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
 	struct crypto_aead *aead = crypto_aead_reqtfm(req);
-	int ret;
 
 	rctx->textsize = req->cryptlen;
 	rctx->blksize = ctx->blksize;
