@@ -47,20 +47,20 @@ static struct mtk_alg_template *mtk_algs[] = {
 #ifdef CONFIG_CRYPTO_DEV_EIP93_DES
 	&mtk_alg_authenc_hmac_md5_cbc_des,
 	&mtk_alg_authenc_hmac_sha1_cbc_des,
-//	&mtk_alg_authenc_hmac_sha224_cbc_des,
+	&mtk_alg_authenc_hmac_sha224_cbc_des,
 	&mtk_alg_authenc_hmac_sha256_cbc_des,
 	&mtk_alg_authenc_hmac_md5_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha1_cbc_des3_ede,
-//	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
+	&mtk_alg_authenc_hmac_sha224_cbc_des3_ede,
 	&mtk_alg_authenc_hmac_sha256_cbc_des3_ede,
 #endif
 	&mtk_alg_authenc_hmac_md5_cbc_aes,
 	&mtk_alg_authenc_hmac_sha1_cbc_aes,
-//	&mtk_alg_authenc_hmac_sha224_cbc_aes,
+	&mtk_alg_authenc_hmac_sha224_cbc_aes,
 	&mtk_alg_authenc_hmac_sha256_cbc_aes,
-//	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
+	&mtk_alg_authenc_hmac_md5_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha1_rfc3686_aes,
-//	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
+	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
 #endif
 };
