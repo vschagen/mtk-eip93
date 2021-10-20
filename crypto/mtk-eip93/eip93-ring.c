@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0
- *
+// SPDX-License-Identifier: GPL-2.0
+/*
  * Copyright (C) 2019 - 2021
  *
  * Richard van Schagen <vschagen@cs.com>
@@ -65,16 +65,7 @@ inline int mtk_put_descriptor(struct mtk_device *mtk,
 	}
 
 	memset(rdesc, 0, sizeof(struct eip93_descriptor_s));
-/*
-	cdesc->peCrtlStat.word = desc->peCrtlStat.word;
-	cdesc->srcAddr = desc->srcAddr;
-	cdesc->dstAddr = desc->dstAddr;
-	cdesc->saAddr = desc->saAddr;
-	cdesc->stateAddr = desc->stateAddr;
-	cdesc->arc4Addr = desc->arc4Addr;
-	cdesc->userId = desc->userId;
-	cdesc->peLength.word = desc->peLength.word;
-*/
+
 	memcpy(cdesc, desc, sizeof(struct eip93_descriptor_s));
 
 	atomic_dec(&mtk->ring->free);
@@ -124,7 +115,6 @@ inline int mtk_get_free_saState(struct mtk_device *mtk)
 		}
 
 	}
-	// TODO add warn_on ?
 
 	return -ENOENT;
 }
