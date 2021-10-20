@@ -277,7 +277,7 @@ static inline int mtk_scatter_combine(struct mtk_device *mtk,
 	int ndesc_cdr = 0, err;
 
 	if (IS_ECB(rctx->flags))
-		rctx->saState_base = NULL;
+		rctx->saState_base = 0;
 
 	if (split < datalen) {
 		stateAddr = rctx->saState_base_ctr;
