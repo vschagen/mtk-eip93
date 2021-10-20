@@ -37,10 +37,9 @@ static inline int mtk_make_sg_copy(struct scatterlist *src,
 	void *pages;
 
 	*dst = kmalloc(sizeof(**dst), GFP_KERNEL);
-	if (!*dst) {
-		printk("NO MEM\n");
+	if (!*dst)
 		return -ENOMEM;
-	}
+
 
 	pages = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA,
 					get_order(len));
@@ -48,7 +47,6 @@ static inline int mtk_make_sg_copy(struct scatterlist *src,
 	if (!pages) {
 		kfree(*dst);
 		*dst = NULL;
-		printk("no free pages\n");
 		return -ENOMEM;
 	}
 
