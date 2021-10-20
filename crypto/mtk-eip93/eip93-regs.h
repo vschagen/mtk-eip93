@@ -157,12 +157,11 @@
  * EIP93_BO_REVERSE_DUAL_WORD : reverse the byte order within a dual-word
  * EIP93_BO_REVERSE_QUAD_WORD : reverse the byte order within a quad-word
  */
-typedef enum
-{
-    EIP93_BO_REVERSE_HALF_WORD = 1,
-    EIP93_BO_REVERSE_WORD = 2,
-    EIP93_BO_REVERSE_DUAL_WORD = 4,
-    EIP93_BO_REVERSE_QUAD_WORD = 8,
+typedef enum {
+	EIP93_BO_REVERSE_HALF_WORD = 1,
+	EIP93_BO_REVERSE_WORD = 2,
+	EIP93_BO_REVERSE_DUAL_WORD = 4,
+	EIP93_BO_REVERSE_QUAD_WORD = 8,
 } EIP93_Byte_Order_Value_t;
 
 /*----------------------------------------------------------------------------
@@ -170,10 +169,9 @@ typedef enum
  * EIP93_BO_REVERSE_HALF_WORD : reverse the byte order within a half-word
  * EIP93_BO_REVERSE_WORD :  reverse the byte order within a word
  */
-typedef enum
-{
-    EIP93_BO_REVERSE_HALF_WORD_TD = 1,
-    EIP93_BO_REVERSE_WORD_TD = 2,
+typedef enum {
+	EIP93_BO_REVERSE_HALF_WORD_TD = 1,
+	EIP93_BO_REVERSE_WORD_TD = 2,
 } EIP93_Byte_Order_Value_TD_t;
 
 
