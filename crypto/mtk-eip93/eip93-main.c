@@ -13,11 +13,6 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
-//#include <linux/types.h>
-
-//#include <crypto/internal/aead.h>
-//#include <crypto/internal/hash.h>
-//#include <crypto/internal/skcipher.h>
 
 #include "eip93-regs.h"
 #include "eip93-common.h"
@@ -132,13 +127,12 @@ void mtk_handle_result_descriptor(struct mtk_device *mtk)
 {
 	struct crypto_async_request *async = NULL;
 	struct eip93_descriptor_s *rdesc;
-	int handled, ready;
-	int err = 0;
-	volatile int done1 = 0;
-	volatile int done2 = 2;
 	bool last_entry, complete;
 	u32 flags;
-	struct sk_buff *skb;
+	int handled, ready;
+	int err = 0;
+	volatile int done1;
+	volatile int done2;
 
 get_more:
 	handled = 0;
@@ -191,14 +185,12 @@ get_more:
 	if (!last_entry)
 		goto get_more;
 #ifdef CONFIG_CRYPTO_DEV_EIP93_SKCIPHER
-	if (flags & MTK_DESC_SKCIPHER) {
+	if (flags & MTK_DESC_SKCIPHER)
 		mtk_skcipher_handle_result(mtk, async, err);
-	}
 #endif
 #ifdef CONFIG_CRYPTO_DEV_EIP93_AEAD
-	if (flags & MTK_DESC_AEAD) {
+	if (flags & MTK_DESC_AEAD)
 		mtk_aead_handle_result(mtk, async, err);
-	}
 #endif
 	goto get_more;
 }
