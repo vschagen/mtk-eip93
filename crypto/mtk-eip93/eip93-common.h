@@ -209,7 +209,7 @@ int mtk_send_req(struct crypto_async_request *async,
 			const u8 *reqiv, struct mtk_cipher_reqctx *rctx);
 
 void mtk_handle_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
-			u8 *reqiv); //, unsigned int ctxassoclen);
+			u8 *reqiv);
 
 #ifdef CONFIG_CRYPTO_DEV_EIP93_SKCIPHER
 int mtk_skcipher_send_req(struct crypto_async_request *async);

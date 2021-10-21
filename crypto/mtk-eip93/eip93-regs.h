@@ -181,7 +181,7 @@ enum EIP93_Byte_Order_Value_TD_t {
 #define EIP93_BYTE_ORDER_TD		EIP93_BO_REVERSE_WORD_TD
 
 // INT_CFG register values
-#define EIP93_INT_HOST_OUTPUT_TYPE	0	// 0 = Level
-#define EIP93_INT_PULSE_CLEAR		0	// 0 = Manual clear
+#define EIP93_INT_HOST_OUTPUT_TYPE	0
+#define EIP93_INT_PULSE_CLEAR		0
 
 #endif

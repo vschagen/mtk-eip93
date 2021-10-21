@@ -40,8 +40,9 @@ void mtk_aead_handle_result(struct mtk_device *mtk,
 
 	if (err == 1)
 		err = -EBADMSG;
+	/* let software handle anti-replay errors */
 	if (err == 4)
-		err = 0; //SPI error
+		err = 0;
 
 	aead_request_complete(req, err);
 }

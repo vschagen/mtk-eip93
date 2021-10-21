@@ -89,7 +89,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	if (err)
 		return err;
 
-	ctx->blksize = AES_BLOCK_SIZE; //crypto_skcipher_blocksize(ctfm);
+	ctx->blksize = AES_BLOCK_SIZE;
 
 	dma_unmap_single(ctx->mtk->dev, ctx->sa_base_in, sa_size,
 								DMA_TO_DEVICE);
