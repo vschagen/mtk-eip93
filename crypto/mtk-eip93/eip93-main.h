@@ -12,6 +12,7 @@
 #include <crypto/internal/rng.h>
 #include <crypto/internal/skcipher.h>
 #include <linux/device.h>
+#include <linux/interrupt.h>
 
 /**
  * struct mtk_device - crypto engine device structure
