@@ -33,7 +33,7 @@ struct mtk_desc_ring {
 	void			*read;
 	void			*write;
 	/* descriptor element offset */
-	uint32_t		offset;
+	u32			offset;
 };
 
 struct mtk_state_pool {
@@ -64,7 +64,7 @@ enum mtk_alg_type {
 struct mtk_alg_template {
 	struct mtk_device	*mtk;
 	enum mtk_alg_type	type;
-	unsigned long		flags;
+	u32			flags;
 	union {
 		struct aead_alg		aead;
 		struct skcipher_alg	skcipher;

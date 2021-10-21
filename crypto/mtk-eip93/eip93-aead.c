@@ -71,7 +71,7 @@ static int mtk_aead_cra_init(struct crypto_tfm *tfm)
 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.aead.base);
-	unsigned long flags = tmpl->flags;
+	u32 flags = tmpl->flags;
 	char *alg_base;
 
 	memset(ctx, 0, sizeof(*ctx));
@@ -142,7 +142,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.skcipher.base);
-	unsigned long flags = tmpl->flags;
+	u32 flags = tmpl->flags;
 	struct crypto_authenc_keys keys;
 	struct crypto_aes_ctx aes;
 	struct saRecord_s *saRecord = ctx->sa_out;

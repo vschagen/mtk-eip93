@@ -66,7 +66,7 @@ static int mtk_des_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 				struct mtk_alg_template, alg.skcipher.base);
 	struct saRecord_s *saRecord = ctx->sa_out;
 	int sa_size = sizeof(struct saRecord_s);
-	unsigned long flags = tmpl->flags;
+	u32 flags = tmpl->flags;
 	unsigned int keylen = len;
 	int err;
 

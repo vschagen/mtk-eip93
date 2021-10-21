@@ -8,14 +8,6 @@
 #ifndef _EIP93_COMMON_H_
 #define _EIP93_COMMON_H_
 
-#include <crypto/internal/aead.h>
-#include <crypto/internal/des.h>
-#include <crypto/internal/skcipher.h>
-
-#include <linux/bits.h>
-#include <linux/types.h>
-#include <linux/scatterlist.h>
-
 #include "eip93-cipher.h"
 
 #define MTK_RING_SIZE			512
@@ -206,7 +198,7 @@ struct eip93_descriptor_s {
 } __packed;
 
 void mtk_set_saRecord(struct saRecord_s *saRecord, const unsigned int keylen,
-				const unsigned long flags);
+				const u32 flags);
 
 int check_valid_request(struct mtk_cipher_reqctx *rctx);
 

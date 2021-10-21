@@ -170,7 +170,7 @@ int check_valid_request(struct mtk_cipher_reqctx *rctx)
  * Even saRecord is set to "0", keep " = 0" for readability.
  */
 void mtk_set_saRecord(struct saRecord_s *saRecord, const unsigned int keylen,
-				const unsigned long flags)
+				const u32 flags)
 {
 	saRecord->saCmd0.bits.ivSource = 2;
 	if (IS_ECB(flags))
@@ -398,7 +398,7 @@ int mtk_send_req(struct crypto_async_request *async,
 	struct saState_s *saState;
 	struct mtk_state_pool *saState_pool;
 	struct eip93_descriptor_s cdesc;
-	unsigned long flags = rctx->flags;
+	u32 flags = rctx->flags;
 	int idx;
 	int offsetin = 0, err = -ENOMEM;
 	u32 datalen = rctx->assoclen + rctx->textsize;

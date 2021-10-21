@@ -66,7 +66,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.skcipher.base);
-	unsigned long flags = tmpl->flags;
+	u32 flags = tmpl->flags;
 	struct crypto_aes_ctx aes;
 	struct saRecord_s *saRecord = ctx->sa_out;
 	int sa_size = sizeof(struct saRecord_s);
