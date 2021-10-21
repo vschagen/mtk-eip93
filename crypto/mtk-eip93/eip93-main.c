@@ -131,8 +131,8 @@ void mtk_handle_result_descriptor(struct mtk_device *mtk)
 	u32 flags;
 	int handled, ready;
 	int err = 0;
-	volatile int done1;
-	volatile int done2;
+	union peCrtlStat_w	done1;
+	union peLength_w	done2;
 
 get_more:
 	handled = 0;
@@ -158,9 +158,9 @@ get_more:
 		}
 		/* make sure DMA is finished writing */
 		do {
-			done1 = (volatile int)rdesc->peCrtlStat.bits.peReady;
-			done2 = (volatile int)rdesc->peLength.bits.peReady;
-		} while ((!done1) || (!done2));
+			done1.word = READ_ONCE(rdesc->peCrtlStat.word);
+			done2.word = READ_ONCE(rdesc->peLength.word);
+		} while ((!done1.bits.peReady) || (!done2.bits.peReady));
 
 		err = rdesc->peCrtlStat.bits.errStatus;
 
