@@ -158,10 +158,10 @@
  * EIP93_BO_REVERSE_QUAD_WORD : reverse the byte order within a quad-word
  */
 enum EIP93_Byte_Order_Value_t {
-    EIP93_BO_REVERSE_HALF_WORD = 1,
-    EIP93_BO_REVERSE_WORD = 2,
-    EIP93_BO_REVERSE_DUAL_WORD = 4,
-    EIP93_BO_REVERSE_QUAD_WORD = 8,
+	EIP93_BO_REVERSE_HALF_WORD = 1,
+	EIP93_BO_REVERSE_WORD = 2,
+	EIP93_BO_REVERSE_DUAL_WORD = 4,
+	EIP93_BO_REVERSE_QUAD_WORD = 8,
 };
 
 /*----------------------------------------------------------------------------
@@ -170,8 +170,8 @@ enum EIP93_Byte_Order_Value_t {
  * EIP93_BO_REVERSE_WORD :  reverse the byte order within a word
  */
 enum EIP93_Byte_Order_Value_TD_t {
-    EIP93_BO_REVERSE_HALF_WORD_TD = 1,
-    EIP93_BO_REVERSE_WORD_TD = 2,
+	EIP93_BO_REVERSE_HALF_WORD_TD = 1,
+	EIP93_BO_REVERSE_WORD_TD = 2,
 };
 
 // BYTE_ORDER_CFG register values
