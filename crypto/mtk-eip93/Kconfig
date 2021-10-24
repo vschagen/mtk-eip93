@@ -27,8 +27,8 @@ config CRYPTO_DEV_EIP93_DES
 	bool "Register legacy DES / 3DES algorithm with the Crypto API"
 	default y
 	select CRYPTO_DEV_EIP93_SKCIPHER
-	select CRYPTO_SKCIPHER
 	select CRYPTO_LIB_DES
+	select CRYPTO_SKCIPHER
 	help
 	  Selecting this will offload DES and 3DES ECB and CBC
 	  crypto to the EIP-93 crypto engine.
