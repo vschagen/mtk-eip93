@@ -477,7 +477,7 @@ static inline int mtk_scatter_combine(struct mtk_device *mtk,
 		}
 
 		if (n == 0)
-			cdesc->userId |= MTK_DESC_LAST | MTK_DESC_FINISH;
+			cdesc->userId |= MTK_DESC_LAST;
 
 		/* Loop - Delay - No need to rollback
 		 * Maybe refine by slowing down at MTK_RING_BUSY

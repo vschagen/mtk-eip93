@@ -171,9 +171,6 @@ get_more:
 		handled++;
 		ready--;
 
-		if (flags & MTK_DESC_FINISH)
-			complete = true;
-
 		if (flags & MTK_DESC_LAST) {
 			last_entry = true;
 			break;
