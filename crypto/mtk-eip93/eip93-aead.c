@@ -50,10 +50,6 @@ int mtk_aead_send_req(struct crypto_async_request *async)
 	struct aead_request *req = aead_request_cast(async);
 	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
 	int err;
-#ifdef CONFIG_CRYPTO_DEV_EIP93_POLL
-	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
-	struct mtk_device *mtk = ctx->mtk;
-#endif
 
 	err = check_valid_request(rctx);
 	if (err) {
