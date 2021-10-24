@@ -7,7 +7,6 @@
 #ifndef _EIP93_CIPHER_H_
 #define _EIP93_CIPHER_H_
 
-#include "eip93-common.h"
 #include "eip93-main.h"
 
 struct mtk_crypto_ctx {
@@ -49,4 +48,16 @@ struct mtk_cipher_reqctx {
 	dma_addr_t			saState_base_ctr;
 	uint32_t			saState_ctr_idx;
 };
+
+int check_valid_request(struct mtk_cipher_reqctx *rctx);
+
+void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
+			struct scatterlist *reqsrc, struct scatterlist *reqdst);
+
+int mtk_send_req(struct crypto_async_request *async,
+			const u8 *reqiv, struct mtk_cipher_reqctx *rctx);
+
+void mtk_handle_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
+			u8 *reqiv);
+
 #endif /* _EIP93_CIPHER_H_ */

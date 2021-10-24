@@ -184,4 +184,120 @@ enum EIP93_Byte_Order_Value_TD_t {
 #define EIP93_INT_HOST_OUTPUT_TYPE	0
 #define EIP93_INT_PULSE_CLEAR		0
 
+/*
+ * Interrupts of EIP93
+ */
+
+enum EIP93_InterruptSource_t {
+	EIP93_INT_PE_CDRTHRESH_REQ =	BIT(0),
+	EIP93_INT_PE_RDRTHRESH_REQ =	BIT(1),
+	EIP93_INT_PE_OPERATION_DONE =	BIT(9),
+	EIP93_INT_PE_INBUFTHRESH_REQ =	BIT(10),
+	EIP93_INT_PE_OUTBURTHRSH_REQ =	BIT(11),
+	EIP93_INT_PE_PRNG_IRQ =		BIT(12),
+	EIP93_INT_PE_ERR_REG =		BIT(13),
+	EIP93_INT_PE_RD_DONE_IRQ =	BIT(16),
+};
+
+union saCmd0 {
+	u32	word;
+	struct {
+		u32 opCode		:3;
+		u32 direction		:1;
+		u32 opGroup		:2;
+		u32 padType		:2;
+		u32 cipher		:4;
+		u32 hash		:4;
+		u32 reserved2		:1;
+		u32 scPad		:1;
+		u32 extPad		:1;
+		u32 hdrProc		:1;
+		u32 digestLength	:4;
+		u32 ivSource		:2;
+		u32 hashSource		:2;
+		u32 saveIv		:1;
+		u32 saveHash		:1;
+		u32 reserved1		:2;
+	} bits;
+} __packed;
+
+union saCmd1 {
+	u32	word;
+	struct {
+		u32 copyDigest		:1;
+		u32 copyHeader		:1;
+		u32 copyPayload		:1;
+		u32 copyPad		:1;
+		u32 reserved4		:4;
+		u32 cipherMode		:2;
+		u32 reserved3		:1;
+		u32 sslMac		:1;
+		u32 hmac		:1;
+		u32 byteOffset		:1;
+		u32 reserved2		:2;
+		u32 hashCryptOffset	:8;
+		u32 aesKeyLen		:3;
+		u32 reserved1		:1;
+		u32 aesDecKey		:1;
+		u32 seqNumCheck		:1;
+		u32 reserved0		:2;
+	} bits;
+} __packed;
+
+struct saRecord_s {
+	union saCmd0	saCmd0;
+	union saCmd1	saCmd1;
+	u32		saKey[8];
+	u32		saIDigest[8];
+	u32		saODigest[8];
+	u32		saSpi;
+	u32		saSeqNum[2];
+	u32		saSeqNumMask[2];
+	u32		saNonce;
+} __packed;
+
+struct saState_s {
+	u32	stateIv[4];
+	u32	stateByteCnt[2];
+	u32	stateIDigest[8];
+} __packed;
+
+union peCrtlStat_w {
+	u32 word;
+	struct {
+		u32 hostReady		:1;
+		u32 peReady		:1;
+		u32 reserved		:1;
+		u32 initArc4		:1;
+		u32 hashFinal		:1;
+		u32 haltMode		:1;
+		u32 prngMode		:2;
+		u32 padValue		:8;
+		u32 errStatus		:8;
+		u32 padCrtlStat		:8;
+	} bits;
+} __packed;
+
+union  peLength_w {
+	u32 word;
+	struct {
+		u32 length		:20;
+		u32 reserved		:2;
+		u32 hostReady		:1;
+		u32 peReady		:1;
+		u32 byPass		:8;
+	} bits;
+} __packed;
+
+struct eip93_descriptor_s {
+	union peCrtlStat_w	peCrtlStat;
+	u32			srcAddr;
+	u32			dstAddr;
+	u32			saAddr;
+	u32			stateAddr;
+	u32			arc4Addr;
+	u32			userId;
+	union peLength_w	peLength;
+} __packed;
+
 #endif

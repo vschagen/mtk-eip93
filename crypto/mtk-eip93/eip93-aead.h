@@ -7,8 +7,6 @@
 #ifndef _EIP93_AEAD_H_
 #define _EIP93_AEAD_H_
 
-#include "eip93-main.h"
-
 extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_aes;
@@ -41,8 +39,5 @@ void mtk_aead_handle_result(struct mtk_device *mtk,
 				int err);
 
 int mtk_aead_send_req(struct crypto_async_request *async);
-
-int mtk_authenc_setkey(struct crypto_shash *cshash, struct saRecord_s *sa,
-			const u8 *authkey, unsigned int authkeylen);
 
 #endif /* _EIP93_AEAD_H_ */

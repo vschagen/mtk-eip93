@@ -8,9 +8,8 @@
 #include <crypto/internal/des.h>
 #include <linux/dma-mapping.h>
 
-#include "eip93-common.h"
-#include "eip93-main.h"
 #include "eip93-cipher.h"
+#include "eip93-common.h"
 #include "eip93-regs.h"
 
 /* Crypto skcipher API functions */

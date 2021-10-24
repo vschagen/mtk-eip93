@@ -22,11 +22,9 @@
 #include <linux/crypto.h>
 #include <linux/dma-mapping.h>
 
-#include "eip93-common.h"
-#include "eip93-main.h"
 #include "eip93-cipher.h"
+#include "eip93-common.h"
 #include "eip93-regs.h"
-#include "eip93-ring.h"
 
 void mtk_aead_handle_result(struct mtk_device *mtk,
 				struct crypto_async_request *async,

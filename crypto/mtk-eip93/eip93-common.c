@@ -14,7 +14,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/scatterlist.h>
 
-#include "eip93-common.h"
 #include "eip93-main.h"
 #include "eip93-cipher.h"
 #include "eip93-regs.h"

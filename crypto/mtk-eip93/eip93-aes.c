@@ -9,12 +9,9 @@
 #include <crypto/ctr.h>
 #include <linux/dma-mapping.h>
 
-#include "eip93-aes.h"
-#include "eip93-common.h"
-#include "eip93-main.h"
 #include "eip93-cipher.h"
+#include "eip93-common.h"
 #include "eip93-regs.h"
-#include "eip93-ring.h"
 
 /* Crypto skcipher API functions */
 static int mtk_skcipher_cra_init(struct crypto_tfm *tfm)

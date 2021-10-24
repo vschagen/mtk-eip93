@@ -14,11 +14,10 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
+#include "eip93-main.h"
 #include "eip93-regs.h"
 #include "eip93-common.h"
-#include "eip93-main.h"
 #include "eip93-ring.h"
-#include "eip93-cipher.h"
 
 #ifdef CONFIG_CRYPTO_DEV_EIP93_AES
 #include "eip93-aes.h"
