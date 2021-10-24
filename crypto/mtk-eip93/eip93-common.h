@@ -8,6 +8,13 @@
 #ifndef _EIP93_COMMON_H_
 #define _EIP93_COMMON_H_
 
+inline int mtk_put_descriptor(struct mtk_device *mtk,
+					struct eip93_descriptor_s *desc);
+
+inline void *mtk_get_descriptor(struct mtk_device *mtk);
+
+inline int mtk_get_free_saState(struct mtk_device *mtk);
+
 void mtk_set_saRecord(struct saRecord_s *saRecord, const unsigned int keylen,
 				const u32 flags);
 

@@ -17,7 +17,6 @@
 #include "eip93-main.h"
 #include "eip93-regs.h"
 #include "eip93-common.h"
-#include "eip93-ring.h"
 
 #ifdef CONFIG_CRYPTO_DEV_EIP93_AES
 #include "eip93-aes.h"
