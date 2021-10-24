@@ -143,10 +143,4 @@ struct mtk_alg_template {
 	} alg;
 };
 
-inline void mtk_irq_disable(struct mtk_device *mtk, u32 mask);
-
-inline void mtk_irq_enable(struct mtk_device *mtk, u32 mask);
-
-inline void mtk_irq_clear(struct mtk_device *mtk, u32 mask);
-
 #endif /* _EIP93_MAIN_H_ */
