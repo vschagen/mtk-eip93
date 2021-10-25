@@ -199,6 +199,85 @@ enum EIP93_InterruptSource_t {
 	EIP93_INT_PE_RD_DONE_IRQ =	BIT(16),
 };
 
+union peConfig_w {
+	u32 word;
+	struct {
+		u32 resetPE		:1;
+		u32 resetRing		:1;
+		u32 reserved		:6;
+		u32 peMode		:2;
+		u32 enCDRupdate		:1;
+		u32 reserved2		:5;
+		u32 swapCDRD		:1;
+		u32 swapSA		:1;
+		u32 swapData		:1;
+		u32 reserved3		:13;
+	} bits;
+} __packed;
+
+union peEndianCfg_w {
+	u32 word;
+	struct {
+		u32 masterByteSwap	:8;
+		u32 reserved		:8;
+		u32 targetByteSwap	:8;
+		u32 reserved2		:8;
+	} bits;
+} __packed;
+
+union peIntCfg_w {
+	u32 word;
+	struct {
+		u32 PulseClear		:1;
+		u32 IntType		:1;
+		u32 reserved		:30;
+	} bits;
+} __packed;
+
+union peClockCfg_w {
+	u32 word;
+	struct {
+		u32 enPEclk		:1;
+		u32 enDESclk		:1;
+		u32 enAESclk		:1;
+		u32 reserved		:1;
+		u32 enHASHclk		:1;
+		u32 reserved2		:27;
+	} bits;
+} __packed;
+
+union peBufThresh_w {
+	u32 word;
+	struct {
+		u32 inputBuffer		:8;
+		u32 reserved		:8;
+		u32 outputBuffer	:8;
+		u32 reserved2		:8;
+	} bits;
+} __packed;
+
+union peRingThresh_w {
+	u32 word;
+	struct {
+		u32 CDRThresh		:10;
+		u32 reserved		:6;
+		u32 RDRThresh		:10;
+		u32 RDTimeout		:4;
+		u32 reserved2		:1;
+		u32 enTimeout		:1;
+	} bits;
+} __packed;
+
+union peRingCfg_w {
+	u32 word;
+	struct {
+		u32 ringSize		:10;
+		u32 reserved		:6;
+		u32 ringOffset		:8;
+		u32 reserved2		:8;
+	} bits;
+} __packed;
+
 union saCmd0 {
 	u32	word;
 	struct {

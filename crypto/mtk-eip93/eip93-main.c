@@ -220,76 +220,71 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 
 void mtk_initialize(struct mtk_device *mtk)
 {
-	uint8_t fRstPacketEngine = 1;
-	uint8_t fResetRing = 1;
-	uint8_t PE_Mode = 3;
-	uint8_t fBO_PD_en = 0;
-	uint8_t fBO_SA_en = 0;
-	uint8_t fBO_Data_en = 0;
-	uint8_t fBO_TD_en = 0;
-	uint8_t fEnablePDRUpdate = 1;
-	int InputThreshold = 256;
-	int OutputThreshold = 256;
-	int DescriptorCountDone = MTK_RING_SIZE - MTK_RING_BUSY;
-	int DescriptorPendingCount = 1;
-	int DescriptorDoneTimeout = 5;
-	u32 regVal;
+	union peConfig_w peConfig;
+	union peEndianCfg_w peEndianCfg;
+	union peIntCfg_w peIntCfg;
+	union peClockCfg_w peClockCfg;
+	union peBufThresh_w peBufThresh;
+	union peRingThresh_w peRingThresh;
 
-	writel((fRstPacketEngine & 1) |
-		((fResetRing & 1) << 1) |
-		((PE_Mode & GENMASK(2, 0)) << 8) |
-		((fBO_PD_en & 1) << 16) |
-		((fBO_SA_en & 1) << 17) |
-		((fBO_Data_en  & 1) << 18) |
-		((fBO_TD_en & 1) << 20) |
-		((fEnablePDRUpdate & 1) << 10),
-		mtk->base + EIP93_REG_PE_CONFIG);
+	/* Reset Engine and setup Mode */
+	peConfig.word = 0;
+	peConfig.bits.bits.resetPE = 1;
+	peConfig.bits.bits.resetRing = 1;
+	peConfig.bits.bits.peMode = 3;
+	peConfig.bits.bits.EnCDRupdate = 1;	
+
+	writel(peConfig.word, mtk->base + EIP93_REG_PE_CONFIG);
 
 	udelay(10);
 
-	fRstPacketEngine = 0;
-	fResetRing = 0;
+	peConfig.bits.bits.resetPE = 0;
+	peConfig.bits.bits.resetRing = 0;
 
-	writel((fRstPacketEngine & 1) |
-		((fResetRing & 1) << 1) |
-		((PE_Mode & GENMASK(2, 0)) << 8) |
-		((fBO_PD_en & 1) << 16) |
-		((fBO_SA_en & 1) << 17) |
-		((fBO_Data_en  & 1) << 18) |
-		((fBO_TD_en & 1) << 20) |
-		((fEnablePDRUpdate & 1) << 10),
-		mtk->base + EIP93_REG_PE_CONFIG);
+	writel(peConfig.word, mtk->base + EIP93_REG_PE_CONFIG);
+
 
 	/* Initialize the BYTE_ORDER_CFG register */
-	writel((EIP93_BYTE_ORDER_PD & GENMASK(4, 0)) |
-		((EIP93_BYTE_ORDER_SA & GENMASK(4, 0)) << 4) |
-		((EIP93_BYTE_ORDER_DATA & GENMASK(4, 0)) << 8) |
-		((EIP93_BYTE_ORDER_TD & GENMASK(2, 0)) << 16),
-		mtk->base + EIP93_REG_PE_ENDIAN_CONFIG);
-	/* Initialize the INT_CFG register */
-	writel((EIP93_INT_HOST_OUTPUT_TYPE & 1) |
-		((EIP93_INT_PULSE_CLEAR << 1) & 1),
-		mtk->base + EIP93_REG_INT_CFG);
-	/* Clock Control, must for DHM, optional for ARM
-	 * 0x1 Only enable Packet Engine Clock
-	 *     AES, DES and HASH clocks on demand
-	 * Activating all clocks per performance
-	 */
-	regVal = BIT(0) | BIT(1) | BIT(2) | BIT(4);
-	writel(regVal, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
+	peEndianCfg.word = 0;
+	writel(peEndianCfg.word, mtk->base + EIP93_REG_PE_ENDIAN_CONFIG);
 
-	writel((InputThreshold & GENMASK(10, 0)) |
-		((OutputThreshold & GENMASK(10, 0)) << 16),
-		mtk->base + EIP93_REG_PE_BUF_THRESH);
+	/* Initialize the INT_CFG register */
+	peIntCfg.word = 0;
+	writel(peIntCfg.word, mtk->base + EIP93_REG_INT_CFG);
+
+	/* Config Clocks */
+	peClockCfg.word = 0;
+	peClockCfg.bits.enPEclk = 1;
+#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+	peClockCfg.bits.enDESclk = 1;
+#endif
+#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+	peClockCfg.bits.enAESclk = 1;
+#endif
+#ifdef CONFIG_CRYPTO_DEV_EIP93_HMAC
+	peClockCfg.bits.enHASHclk = 1;
+#endif
+	writel(peClockCfg.word, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
+
+	/* Config DMA thresholds */
+	peBufThresh.word = 0;
+	peBufThresh.bits.inputBuffer  = 128;
+	peBufThresh.bits.outputBuffer = 128;
+
+	writel(peBufThresh.word, mtk->base + EIP93_REG_PE_BUF_THRESH);
 
 	/* Clear/ack all interrupts before disable all */
 	mtk_irq_clear(mtk, 0xFFFFFFFF);
 	mtk_irq_disable(mtk, 0xFFFFFFFF);
 
-	writel(BIT(31) | (DescriptorCountDone & GENMASK(10, 0)) |
-		(((DescriptorPendingCount - 1) & GENMASK(10, 0)) << 16) |
-		((DescriptorDoneTimeout  & GENMASK(4, 0)) << 26),
-		mtk->base + EIP93_REG_PE_RING_THRESH);
+	/* Config Ring Threshold */
+	peRingThresh.word = 0;
+	peRingThresh.bits.CDRThresh = MTK_RING_SIZE - MTK_RING_BUSY;
+	peRingThresh.bits.RDRThresh = 1;
+	peRingThresh.bits.RDTimeout = 5;
+	peRingThresh.bits.enTimeout = 1;
+
+	writel(peRingThresh.word, mtk->base + EIP93_REG_PE_RING_THRESH);
 }
 
 static void mtk_desc_free(struct mtk_device *mtk,
@@ -306,37 +301,41 @@ static int mtk_desc_init(struct mtk_device *mtk,
 			struct mtk_desc_ring *rdr)
 {
 	struct mtk_state_pool *saState_pool;
+	union peRingCfg_w peRingCfg;
 	int RingOffset, RingSize, i;
 
-	cdr->offset = sizeof(struct eip93_descriptor_s);
+
+	RingOffset = sizeof(struct eip93_descriptor_s);
+	RingSize = MTK_RING_SIZE - 1;
+
+	cdr->offset = RingOffset
 	cdr->base = dmam_alloc_coherent(mtk->dev, cdr->offset * MTK_RING_SIZE,
 					&cdr->base_dma, GFP_KERNEL);
 	if (!cdr->base)
 		return -ENOMEM;
 
 	cdr->write = cdr->base;
-	cdr->base_end = cdr->base + cdr->offset * (MTK_RING_SIZE - 1);
+	cdr->base_end = cdr->base + cdr->offset * RingSize;
 	cdr->read  = cdr->base;
 
-	rdr->offset = sizeof(struct eip93_descriptor_s);
+	rdr->offset = RingOffset;
 	rdr->base = dmam_alloc_coherent(mtk->dev, rdr->offset * MTK_RING_SIZE,
 					&rdr->base_dma, GFP_KERNEL);
 	if (!rdr->base)
 		return -ENOMEM;
 
 	rdr->write = rdr->base;
-	rdr->base_end = rdr->base + rdr->offset * (MTK_RING_SIZE - 1);
+	rdr->base_end = rdr->base + rdr->offset * RingSize;
 	rdr->read  = rdr->base;
 
 	writel((u32)cdr->base_dma, mtk->base + EIP93_REG_PE_CDR_BASE);
 	writel((u32)rdr->base_dma, mtk->base + EIP93_REG_PE_RDR_BASE);
 
-	RingOffset = 8; /* 8 words per descriptor */
-	RingSize = MTK_RING_SIZE - 1;
+	peRingCfg.word = 0;
+	peRingCfg.bits.RingSize = RingSize;
+	peRingCfg.bits.RingOffset = RingOffset / 4; (Words)
 
-	writel(((RingOffset & GENMASK(8, 0)) << 16) |
-		(RingSize & GENMASK(10, 0)),
-		mtk->base + EIP93_REG_PE_RING_CONFIG);
+	writel(peRingCfg.word, mtk->base + EIP93_REG_PE_RING_CONFIG);
 
 	atomic_set(&mtk->ring->free, MTK_RING_SIZE - 1);
 	/* Create State record DMA pool */
