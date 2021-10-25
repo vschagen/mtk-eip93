@@ -229,20 +229,19 @@ void mtk_initialize(struct mtk_device *mtk)
 
 	/* Reset Engine and setup Mode */
 	peConfig.word = 0;
-	peConfig.bits.bits.resetPE = 1;
-	peConfig.bits.bits.resetRing = 1;
-	peConfig.bits.bits.peMode = 3;
-	peConfig.bits.bits.EnCDRupdate = 1;	
+	peConfig.bits.resetPE = 1;
+	peConfig.bits.resetRing = 1;
+	peConfig.bits.peMode = 3;
+	peConfig.bits.enCDRupdate = 1;	
 
 	writel(peConfig.word, mtk->base + EIP93_REG_PE_CONFIG);
 
 	udelay(10);
 
-	peConfig.bits.bits.resetPE = 0;
-	peConfig.bits.bits.resetRing = 0;
+	peConfig.bits.resetPE = 0;
+	peConfig.bits.resetRing = 0;
 
 	writel(peConfig.word, mtk->base + EIP93_REG_PE_CONFIG);
-
 
 	/* Initialize the BYTE_ORDER_CFG register */
 	peEndianCfg.word = 0;
@@ -308,7 +307,7 @@ static int mtk_desc_init(struct mtk_device *mtk,
 	RingOffset = sizeof(struct eip93_descriptor_s);
 	RingSize = MTK_RING_SIZE - 1;
 
-	cdr->offset = RingOffset
+	cdr->offset = RingOffset;
 	cdr->base = dmam_alloc_coherent(mtk->dev, cdr->offset * MTK_RING_SIZE,
 					&cdr->base_dma, GFP_KERNEL);
 	if (!cdr->base)
@@ -333,11 +332,11 @@ static int mtk_desc_init(struct mtk_device *mtk,
 
 	peRingCfg.word = 0;
 	peRingCfg.bits.RingSize = RingSize;
-	peRingCfg.bits.RingOffset = RingOffset / 4; (Words)
+	peRingCfg.bits.RingOffset = RingOffset / 4;
 
 	writel(peRingCfg.word, mtk->base + EIP93_REG_PE_RING_CONFIG);
 
-	atomic_set(&mtk->ring->free, MTK_RING_SIZE - 1);
+	atomic_set(&mtk->ring->free, RingSize);
 	/* Create State record DMA pool */
 	RingOffset = sizeof(struct saState_s);
 	RingSize =  RingOffset * MTK_RING_SIZE;
