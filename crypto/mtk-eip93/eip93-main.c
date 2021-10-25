@@ -331,8 +331,8 @@ static int mtk_desc_init(struct mtk_device *mtk,
 	writel((u32)rdr->base_dma, mtk->base + EIP93_REG_PE_RDR_BASE);
 
 	peRingCfg.word = 0;
-	peRingCfg.bits.RingSize = RingSize;
-	peRingCfg.bits.RingOffset = RingOffset / 4;
+	peRingCfg.bits.ringSize = RingSize;
+	peRingCfg.bits.ringOffset = RingOffset / 4;
 
 	writel(peRingCfg.word, mtk->base + EIP93_REG_PE_RING_CONFIG);
 

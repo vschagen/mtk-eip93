@@ -5,8 +5,13 @@
  * Richard van Schagen <vschagen@cs.com>
  */
 
+#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
 #include <crypto/aes.h>
 #include <crypto/ctr.h>
+#endif
+#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#include <crypto/internal/des.h>
+#endif
 #include <linux/dma-mapping.h>
 
 #include "eip93-cipher.h"
@@ -64,16 +69,15 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.skcipher.base);
 	u32 flags = tmpl->flags;
-	struct crypto_aes_ctx aes;
 	struct saRecord_s *saRecord = ctx->sa_out;
-	int sa_size = sizeof(struct saRecord_s);
-	unsigned int keylen = len;
 	u32 nonce = 0;
-	int err = -EINVAL;
+	unsigned int keylen = len;
+	int sa_size = sizeof(struct saRecord_s), err = -EINVAL;
 
 	if (!key || !keylen)
-		return -EINVAL;
+		return err;
 
+#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
 	if (IS_RFC3686(flags)) {
 		if (len < CTR_RFC3686_NONCE_SIZE)
 			return err;
@@ -81,12 +85,27 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 		keylen = len - CTR_RFC3686_NONCE_SIZE;
 		memcpy(&nonce, key + keylen, CTR_RFC3686_NONCE_SIZE);
 	}
+#endif
 
-	err = aes_expandkey(&aes, key, keylen);
+#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+	if (flags & MTK_ALG_DES) {
+		ctx->blksize = DES_BLOCK_SIZE;
+		err = verify_skcipher_des_key(ctfm, key);
+	}
+	if (flags & MTK_ALG_3DES) {
+		ctx->blksize = DES3_EDE_BLOCK_SIZE;
+		err = verify_skcipher_des3_key(ctfm, key);
+	}
+#endif
+#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+	if (flags & MTK_ALG_AES) {
+		struct crypto_aes_ctx aes;
+		ctx->blksize = AES_BLOCK_SIZE;
+		err = aes_expandkey(&aes, key, keylen);
+	}
+#endif
 	if (err)
 		return err;
-
-	ctx->blksize = AES_BLOCK_SIZE;
 
 	dma_unmap_single(ctx->mtk->dev, ctx->sa_base_in, sa_size,
 								DMA_TO_DEVICE);
@@ -164,7 +183,7 @@ static int mtk_skcipher_decrypt(struct skcipher_request *req)
 }
 
 /* Available algorithms in this module */
-
+#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
 struct mtk_alg_template mtk_alg_ecb_aes = {
 	.type = MTK_ALG_TYPE_SKCIPHER,
 	.flags = MTK_MODE_ECB | MTK_ALG_AES,
@@ -272,3 +291,109 @@ struct mtk_alg_template mtk_alg_rfc3686_aes = {
 		},
 	},
 };
+#endif
+#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+struct mtk_alg_template mtk_alg_ecb_des = {
+	.type = MTK_ALG_TYPE_SKCIPHER,
+	.flags = MTK_MODE_ECB | MTK_ALG_DES,
+	.alg.skcipher = {
+		.setkey = mtk_skcipher_setkey,
+		.encrypt = mtk_skcipher_encrypt,
+		.decrypt = mtk_skcipher_decrypt,
+		.min_keysize = DES_KEY_SIZE,
+		.max_keysize = DES_KEY_SIZE,
+		.ivsize	= 0,
+		.base = {
+			.cra_name = "ecb(des)",
+			.cra_driver_name = "ebc(des-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = DES_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_crypto_ctx),
+			.cra_alignmask = 0,
+			.cra_init = mtk_skcipher_cra_init,
+			.cra_exit = mtk_skcipher_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+
+struct mtk_alg_template mtk_alg_cbc_des = {
+	.type = MTK_ALG_TYPE_SKCIPHER,
+	.flags = MTK_MODE_CBC | MTK_ALG_DES,
+	.alg.skcipher = {
+		.setkey = mtk_skcipher_setkey,
+		.encrypt = mtk_skcipher_encrypt,
+		.decrypt = mtk_skcipher_decrypt,
+		.min_keysize = DES_KEY_SIZE,
+		.max_keysize = DES_KEY_SIZE,
+		.ivsize	= DES_BLOCK_SIZE,
+		.base = {
+			.cra_name = "cbc(des)",
+			.cra_driver_name = "cbc(des-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = DES_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_crypto_ctx),
+			.cra_alignmask = 0,
+			.cra_init = mtk_skcipher_cra_init,
+			.cra_exit = mtk_skcipher_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+
+struct mtk_alg_template mtk_alg_ecb_des3_ede = {
+	.type = MTK_ALG_TYPE_SKCIPHER,
+	.flags = MTK_MODE_ECB | MTK_ALG_3DES,
+	.alg.skcipher = {
+		.setkey = mtk_skcipher_setkey,
+		.encrypt = mtk_skcipher_encrypt,
+		.decrypt = mtk_skcipher_decrypt,
+		.min_keysize = DES3_EDE_KEY_SIZE,
+		.max_keysize = DES3_EDE_KEY_SIZE,
+		.ivsize	= 0,
+		.base = {
+			.cra_name = "ecb(des3_ede)",
+			.cra_driver_name = "ecb(des3_ede-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_crypto_ctx),
+			.cra_alignmask = 0,
+			.cra_init = mtk_skcipher_cra_init,
+			.cra_exit = mtk_skcipher_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+
+struct mtk_alg_template mtk_alg_cbc_des3_ede = {
+	.type = MTK_ALG_TYPE_SKCIPHER,
+	.flags = MTK_MODE_CBC | MTK_ALG_3DES,
+	.alg.skcipher = {
+		.setkey = mtk_skcipher_setkey,
+		.encrypt = mtk_skcipher_encrypt,
+		.decrypt = mtk_skcipher_decrypt,
+		.min_keysize = DES3_EDE_KEY_SIZE,
+		.max_keysize = DES3_EDE_KEY_SIZE,
+		.ivsize	= DES3_EDE_BLOCK_SIZE,
+		.base = {
+			.cra_name = "cbc(des3_ede)",
+			.cra_driver_name = "cbc(des3_ede-eip93)",
+			.cra_priority = MTK_CRA_PRIORITY,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+					CRYPTO_ALG_KERN_DRIVER_ONLY,
+			.cra_blocksize = DES3_EDE_BLOCK_SIZE,
+			.cra_ctxsize = sizeof(struct mtk_crypto_ctx),
+			.cra_alignmask = 0,
+			.cra_init = mtk_skcipher_cra_init,
+			.cra_exit = mtk_skcipher_cra_exit,
+			.cra_module = THIS_MODULE,
+		},
+	},
+};
+#endif
