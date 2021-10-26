@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2019 - 2021
  *
- * Richard van Schagen <vschagen@cs.com>
+ * Richard van Schagen <vschagen@icloud.com>
  */
 
 #ifdef CONFIG_CRYPTO_DEV_EIP93_AES

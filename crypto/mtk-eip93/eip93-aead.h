@@ -2,7 +2,7 @@
  *
  * Copyright (C) 2019 - 2021
  *
- * Richard van Schagen <vschagen@cs.com>
+ * Richard van Schagen <vschagen@icloud.com>
  */
 #ifndef _EIP93_AEAD_H_
 #define _EIP93_AEAD_H_
