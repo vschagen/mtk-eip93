@@ -76,7 +76,6 @@ static int mtk_aead_cra_init(struct crypto_tfm *tfm)
 
 	ctx->mtk = tmpl->mtk;
 	ctx->type = tmpl->type;
-	ctx->fallback = NULL;
 	ctx->in_first = true;
 	ctx->out_first = true;
 

@@ -17,7 +17,6 @@ struct mtk_crypto_ctx {
 	dma_addr_t			sa_base_out;
 	uint32_t			saNonce;
 	int				blksize;
-	struct crypto_skcipher		*fallback;
 	/* AEAD specific */
 	unsigned int			authsize;
 	unsigned int			assoclen_in;
