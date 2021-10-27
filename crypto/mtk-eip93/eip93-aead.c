@@ -15,7 +15,7 @@
 #include <crypto/null.h>
 #include <crypto/sha.h>
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 #include <crypto/internal/des.h>
 #endif
 
@@ -547,7 +547,7 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes = {
 	},
 };
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des = {
 	.type = MTK_ALG_TYPE_AEAD,
 	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC | MTK_ALG_DES,

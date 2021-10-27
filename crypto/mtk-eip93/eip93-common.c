@@ -688,7 +688,7 @@ void mtk_handle_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
 	}
 }
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_SKCIPHER
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_SKCIPHER)
 int mtk_skcipher_send_req(struct crypto_async_request *async)
 {
 	struct skcipher_request *req = skcipher_request_cast(async);
@@ -719,7 +719,7 @@ void mtk_skcipher_handle_result(struct mtk_device *mtk,
 }
 #endif
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_HMAC
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_HMAC)
 /* basically this is set hmac - key */
 int mtk_authenc_setkey(struct crypto_shash *cshash, struct saRecord_s *sa,
 			const u8 *authkey, unsigned int authkeylen)

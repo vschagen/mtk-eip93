@@ -5,11 +5,11 @@
  * Richard van Schagen <vschagen@icloud.com>
  */
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
 #include <crypto/aes.h>
 #include <crypto/ctr.h>
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 #include <crypto/internal/des.h>
 #endif
 #include <linux/dma-mapping.h>

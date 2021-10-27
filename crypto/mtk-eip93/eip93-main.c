@@ -19,31 +19,31 @@
 #include "eip93-regs.h"
 #include "eip93-common.h"
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_AES)
 #include "eip93-aes.h"
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_DES)
 #include "eip93-des.h"
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AEAD
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_AEAD)
 #include "eip93-aead.h"
 #endif
 
 static struct mtk_alg_template *mtk_algs[] = {
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_DES)
 	&mtk_alg_ecb_des,
 	&mtk_alg_cbc_des,
 	&mtk_alg_ecb_des3_ede,
 	&mtk_alg_cbc_des3_ede,
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_AES)
 	&mtk_alg_ecb_aes,
 	&mtk_alg_cbc_aes,
 	&mtk_alg_ctr_aes,
 	&mtk_alg_rfc3686_aes,
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AEAD
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_AEAD)
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_DES)
 	&mtk_alg_authenc_hmac_md5_cbc_des,
 	&mtk_alg_authenc_hmac_sha1_cbc_des,
 	&mtk_alg_authenc_hmac_sha224_cbc_des,
@@ -178,11 +178,11 @@ get_more:
 
 	if (!last_entry)
 		goto get_more;
-#ifdef CONFIG_CRYPTO_DEV_EIP93_SKCIPHER
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_SKCIPHER)
 	if (flags & MTK_DESC_SKCIPHER)
 		mtk_skcipher_handle_result(mtk, async, err);
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AEAD
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_AEAD)
 	if (flags & MTK_DESC_AEAD)
 		mtk_aead_handle_result(mtk, async, err);
 #endif
@@ -253,13 +253,13 @@ void mtk_initialize(struct mtk_device *mtk)
 	/* Config Clocks */
 	peClockCfg.word = 0;
 	peClockCfg.bits.enPEclk = 1;
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_DES)
 	peClockCfg.bits.enDESclk = 1;
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_AES)
 	peClockCfg.bits.enAESclk = 1;
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_HMAC
+#if IS_ENABLED( CONFIG_CRYPTO_DEV_EIP93_HMAC)
 	peClockCfg.bits.enHASHclk = 1;
 #endif
 	writel(peClockCfg.word, mtk->base + EIP93_REG_PE_CLOCK_CTRL);

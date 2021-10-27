@@ -19,7 +19,7 @@ extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_rfc3686_aes;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes;
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 extern struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha1_cbc_des;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des;
