@@ -33,6 +33,8 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/interrupt-controller/mips-gic.h>
+
     crypto: crypto@1e004000 {
          compatible = "mediatek,mtk-eip93";
          reg = <0x1e004000 0x1000>;
