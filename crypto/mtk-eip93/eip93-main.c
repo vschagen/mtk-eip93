@@ -11,6 +11,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
@@ -123,12 +124,11 @@ fail:
 
 void mtk_handle_result_descriptor(struct mtk_device *mtk)
 {
-	struct crypto_async_request *async = NULL;
+	struct crypto_async_request *async;
 	struct eip93_descriptor_s *rdesc;
-	bool last_entry, complete;
+	bool last_entry;
 	u32 flags;
-	int handled, ready;
-	int err = 0;
+	int handled, ready, err;
 	union peCrtlStat_w	done1;
 	union peLength_w	done2;
 
@@ -144,7 +144,6 @@ get_more:
 	}
 
 	last_entry = false;
-	complete = false;
 
 	while (ready) {
 		rdesc = mtk_get_descriptor(mtk);
@@ -435,18 +434,20 @@ static int mtk_crypto_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#if defined(CONFIG_OF)
 static const struct of_device_id mtk_crypto_of_match[] = {
 	{ .compatible = "mediatek,mtk-eip93", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, mtk_crypto_of_match);
+#endif
 
 static struct platform_driver mtk_crypto_driver = {
 	.probe = mtk_crypto_probe,
 	.remove = mtk_crypto_remove,
 	.driver = {
 		.name = "mtk-eip93",
-		.of_match_table = mtk_crypto_of_match,
+		.of_match_table = of_match_ptr(mtk_crypto_of_match),
 	},
 };
 module_platform_driver(mtk_crypto_driver);
