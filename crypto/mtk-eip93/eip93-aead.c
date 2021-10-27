@@ -13,7 +13,8 @@
 #include <crypto/internal/aead.h>
 #include <crypto/md5.h>
 #include <crypto/null.h>
-#include <crypto/sha.h>
+#include <crypto/sha1.h>
+#include <crypto/sha2.h>
 
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 #include <crypto/internal/des.h>
