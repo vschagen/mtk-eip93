@@ -95,16 +95,17 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(tfm);
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.skcipher.base);
-	u32 flags = tmpl->flags;
 	struct saRecord_s *saRecord = ctx->sa_out;
+	u32 flags = tmpl->flags;
 	u32 nonce = 0;
 	unsigned int keylen = len;
-	int sa_size = sizeof(struct saRecord_s), err = -EINVAL;
+	int sa_size = sizeof(struct saRecord_s)
+	int err = -EINVAL;
 
 	if (!key || !keylen)
 		return err;
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
 	if (IS_RFC3686(flags)) {
 		if (len < CTR_RFC3686_NONCE_SIZE)
 			return err;
@@ -114,7 +115,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	}
 #endif
 
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 	if (flags & MTK_ALG_DES) {
 		ctx->blksize = DES_BLOCK_SIZE;
 		err = verify_skcipher_des_key(ctfm, key);
@@ -124,7 +125,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 		err = verify_skcipher_des3_key(ctfm, key);
 	}
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
 	if (flags & MTK_ALG_AES) {
 		struct crypto_aes_ctx aes;
 
@@ -212,7 +213,7 @@ static int mtk_skcipher_decrypt(struct skcipher_request *req)
 }
 
 /* Available algorithms in this module */
-#ifdef CONFIG_CRYPTO_DEV_EIP93_AES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
 struct mtk_alg_template mtk_alg_ecb_aes = {
 	.type = MTK_ALG_TYPE_SKCIPHER,
 	.flags = MTK_MODE_ECB | MTK_ALG_AES,
@@ -321,7 +322,7 @@ struct mtk_alg_template mtk_alg_rfc3686_aes = {
 	},
 };
 #endif
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 struct mtk_alg_template mtk_alg_ecb_des = {
 	.type = MTK_ALG_TYPE_SKCIPHER,
 	.flags = MTK_MODE_ECB | MTK_ALG_DES,

@@ -76,7 +76,6 @@ inline int mtk_put_descriptor(struct mtk_device *mtk,
 	}
 
 	memset(rdesc, 0, sizeof(struct eip93_descriptor_s));
-
 	memcpy(cdesc, desc, sizeof(struct eip93_descriptor_s));
 
 	atomic_dec(&mtk->ring->free);
@@ -110,6 +109,7 @@ inline void *mtk_get_descriptor(struct mtk_device *mtk)
 
 	atomic_inc(&mtk->ring->free);
 	spin_unlock_irqrestore(&mtk->ring->read_lock, irqflags);
+
 	return ptr;
 }
 
@@ -355,7 +355,6 @@ void mtk_set_saRecord(struct saRecord_s *saRecord, const unsigned int keylen,
 		saRecord->saCmd1.bits.copyHeader = 0;
 	}
 
-	/* Default for now, might be used for ESP offload */
 	saRecord->saCmd1.bits.seqNumCheck = 0;
 	saRecord->saSpi = 0x0;
 	saRecord->saSeqNumMask[0] = 0xFFFFFFFF;
@@ -591,7 +590,7 @@ skip_iv:
 	cdesc.peCrtlStat.bits.peReady = 0;
 	cdesc.saAddr = rctx->saRecord_base;
 	cdesc.arc4Addr = (u32)async;
-	cdesc.userId = (flags & (MTK_DESC_AEAD | MTK_DESC_SKCIPHER));
+	cdesc.userId = flags;
 	rctx->cdesc = &cdesc;
 
 	/* map DMA_BIDIRECTIONAL to invalidate cache on destination

@@ -280,7 +280,7 @@ static void mtk_initialize(struct mtk_device *mtk)
 	/* Config Ring Threshold */
 	peRingThresh.word = 0;
 	peRingThresh.bits.CDRThresh = MTK_RING_SIZE - MTK_RING_BUSY;
-	peRingThresh.bits.RDRThresh = 1;
+	peRingThresh.bits.RDRThresh = 0;
 	peRingThresh.bits.RDTimeout = 5;
 	peRingThresh.bits.enTimeout = 1;
 
@@ -304,7 +304,7 @@ static int mtk_set_ring(struct mtk_device *mtk, struct mtk_desc_ring *ring,
 		return -ENOMEM;
 
 	ring->write = ring->base;
-	ring->base_end = ring->base + Offset * MTK_RING_SIZE;
+	ring->base_end = ring->base + Offset * (MTK_RING_SIZE - 1);
 	ring->read  = ring->base;
 
 	return 0;

@@ -159,7 +159,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	}
 
 	switch ((flags & MTK_ALG_MASK)) {
-#ifdef CONFIG_CRYPTO_DEV_EIP93_DES
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 	case MTK_ALG_DES:
 		err = verify_aead_des_key(ctfm, keys.enckey, keys.enckeylen);
 		break;
@@ -330,6 +330,7 @@ static int mtk_aead_decrypt(struct aead_request *req)
 }
 
 /* Available authenc algorithms in this module */
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
 struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_aes = {
 	.type = MTK_ALG_TYPE_AEAD,
 	.flags = MTK_HASH_HMAC | MTK_HASH_MD5 | MTK_MODE_CBC | MTK_ALG_AES,
@@ -549,7 +550,7 @@ struct mtk_alg_template mtk_alg_authenc_hmac_sha256_rfc3686_aes = {
 		},
 	},
 };
-
+#endif
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
 struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_des = {
 	.type = MTK_ALG_TYPE_AEAD,
