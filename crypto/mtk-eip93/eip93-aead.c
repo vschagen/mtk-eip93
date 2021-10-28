@@ -138,19 +138,20 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
 				struct mtk_alg_template, alg.skcipher.base);
 	u32 flags = tmpl->flags;
+	u32 nonce = 0;
 	struct crypto_authenc_keys keys;
 	struct crypto_aes_ctx aes;
 	struct saRecord_s *saRecord = ctx->sa_out;
 	int sa_size = sizeof(struct saRecord_s);
-	int err;
-	u32 nonce = 0;
+	int err = -EINVAL;
+
 
 	if (crypto_authenc_extractkeys(&keys, key, len))
-		return -EINVAL;
+		return err;
 
 	if (IS_RFC3686(flags)) {
 		if (keys.enckeylen < CTR_RFC3686_NONCE_SIZE)
-			goto badkey;
+			return err;
 
 		keys.enckeylen -= CTR_RFC3686_NONCE_SIZE;
 		memcpy(&nonce, keys.enckey + keys.enckeylen,
@@ -173,7 +174,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 		err = aes_expandkey(&aes, keys.enckey, keys.enckeylen);
 	}
 	if (err)
-		goto badkey;
+		return err;
 
 	ctx->blksize = crypto_aead_blocksize(ctfm);
 	dma_unmap_single(ctx->mtk->dev, ctx->sa_base_in, sa_size,
@@ -205,7 +206,7 @@ static int mtk_aead_setkey(struct crypto_aead *ctfm, const u8 *key,
 								DMA_TO_DEVICE);
 	ctx->in_first = true;
 	ctx->out_first = true;
-badkey:
+
 	return err;
 }
 

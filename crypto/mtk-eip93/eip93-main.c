@@ -204,8 +204,6 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 	struct mtk_device *mtk = (struct mtk_device *)dev_id;
 	u32 irq_status;
 
-	irq++;
-
 	irq_status = readl(mtk->base + EIP93_REG_INT_MASK_STAT);
 
 	if (irq_status & EIP93_INT_PE_RDRTHRESH_REQ) {
@@ -214,7 +212,6 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-/* TODO: error handler; for now just clear ALL */
 	mtk_irq_clear(mtk, irq_status);
 	if (irq_status)
 		mtk_irq_disable(mtk, irq_status);
@@ -362,6 +359,7 @@ static int mtk_desc_init(struct mtk_device *mtk)
 
 	return 0;
 }
+
 static void mtk_cleanup(struct mtk_device *mtk)
 {
 	tasklet_kill(&mtk->ring->done_task);
