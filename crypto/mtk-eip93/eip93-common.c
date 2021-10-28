@@ -589,7 +589,7 @@ skip_iv:
 	cdesc.peCrtlStat.bits.padCrtlStat = 0;
 	cdesc.peCrtlStat.bits.peReady = 0;
 	cdesc.saAddr = rctx->saRecord_base;
-	cdesc.arc4Addr = (u32)async;
+	cdesc.arc4Addr = (uint32_t)async;
 	cdesc.userId = flags;
 	rctx->cdesc = &cdesc;
 

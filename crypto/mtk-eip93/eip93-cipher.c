@@ -99,7 +99,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	u32 flags = tmpl->flags;
 	u32 nonce = 0;
 	unsigned int keylen = len;
-	int sa_size = sizeof(struct saRecord_s)
+	int sa_size = sizeof(struct saRecord_s);
 	int err = -EINVAL;
 
 	if (!key || !keylen)
