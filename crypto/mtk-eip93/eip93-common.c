@@ -5,7 +5,6 @@
  * Richard van Schagen <vschagen@icloud.com>
  */
 
-
 #include <crypto/aes.h>
 #include <crypto/ctr.h>
 #include <crypto/hmac.h>
@@ -15,8 +14,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/scatterlist.h>
 
-#include "eip93-main.h"
 #include "eip93-cipher.h"
+#include "eip93-common.h"
+#include "eip93-main.h"
 #include "eip93-regs.h"
 
 inline void *mtk_ring_next_wptr(struct mtk_device *mtk,
@@ -591,10 +591,7 @@ skip_iv:
 	cdesc.peCrtlStat.bits.peReady = 0;
 	cdesc.saAddr = rctx->saRecord_base;
 	cdesc.arc4Addr = (u32)async;
-	if (ctx->type == MTK_ALG_TYPE_AEAD)
-		cdesc.userId = MTK_DESC_AEAD;
-	else
-		cdesc.userId = MTK_DESC_SKCIPHER;
+	cdesc.userId = (flags & (MTK_DESC_AEAD | MTK_DESC_SKCIPHER));
 	rctx->cdesc = &cdesc;
 
 	/* map DMA_BIDIRECTIONAL to invalidate cache on destination
@@ -688,37 +685,6 @@ void mtk_handle_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
 		saState_pool->in_use = false;
 	}
 }
-
-#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_SKCIPHER)
-int mtk_skcipher_send_req(struct crypto_async_request *async)
-{
-	struct skcipher_request *req = skcipher_request_cast(async);
-	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
-	int err;
-
-	err = check_valid_request(rctx);
-
-	if (err) {
-		skcipher_request_complete(req, err);
-		return err;
-	}
-
-	return mtk_send_req(async, req->iv, rctx);
-}
-
-void mtk_skcipher_handle_result(struct mtk_device *mtk,
-				struct crypto_async_request *async,
-				int err)
-{
-	struct skcipher_request *req = skcipher_request_cast(async);
-	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
-
-	mtk_unmap_dma(mtk, rctx, req->src, req->dst);
-	mtk_handle_result(mtk, rctx, req->iv);
-
-	skcipher_request_complete(req, err);
-}
-#endif
 
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_HMAC)
 /* basically this is set hmac - key */

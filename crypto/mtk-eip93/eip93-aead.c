@@ -23,14 +23,15 @@
 #include <linux/crypto.h>
 #include <linux/dma-mapping.h>
 
+#include "eip93-aead.h"
 #include "eip93-cipher.h"
 #include "eip93-common.h"
 #include "eip93-regs.h"
 
-void mtk_aead_handle_result(struct mtk_device *mtk,
-				struct crypto_async_request *async,
-				int err)
+void mtk_aead_handle_result(struct crypto_async_request *async, int err)
 {
+	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(async->tfm);
+	struct mtk_device *mtk = ctx->mtk;
 	struct aead_request *req = aead_request_cast(async);
 	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
 
@@ -46,7 +47,7 @@ void mtk_aead_handle_result(struct mtk_device *mtk,
 	aead_request_complete(req, err);
 }
 
-int mtk_aead_send_req(struct crypto_async_request *async)
+static int mtk_aead_send_req(struct crypto_async_request *async)
 {
 	struct aead_request *req = aead_request_cast(async);
 	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
@@ -76,7 +77,6 @@ static int mtk_aead_cra_init(struct crypto_tfm *tfm)
 			sizeof(struct mtk_cipher_reqctx));
 
 	ctx->mtk = tmpl->mtk;
-	ctx->type = tmpl->type;
 	ctx->in_first = true;
 	ctx->out_first = true;
 
@@ -272,6 +272,7 @@ static int mtk_aead_crypt(struct aead_request *req)
 	rctx->sg_src = req->src;
 	rctx->sg_dst = req->dst;
 	rctx->ivsize = crypto_aead_ivsize(aead);
+	rctx->flags |= MTK_DESC_AEAD;
 
 	if IS_DECRYPT(rctx->flags)
 		rctx->textsize -= rctx->authsize;

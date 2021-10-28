@@ -20,7 +20,7 @@
 #define EIP93_REG_PE_USER_ID		((DESP_BASE)+(0x06 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_LENGTH		((DESP_BASE)+(0x07 * EIP93_REG_WIDTH))
 
-//PACKET ENGINE RING configuartion registers
+//PACKET ENGINE RING configuration registers
 #define PE_RNG_BASE			0x0000080
 
 #define EIP93_REG_PE_CDR_BASE		((PE_RNG_BASE)+(0x00 * EIP93_REG_WIDTH))
@@ -31,7 +31,7 @@
 #define EIP93_REG_PE_RD_COUNT		((PE_RNG_BASE)+(0x05 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_RING_RW_PNTR	((PE_RNG_BASE)+(0x06 * EIP93_REG_WIDTH))
 
-//PACKET ENGINE  configuartion registers
+//PACKET ENGINE  configuration registers
 #define PE_CFG_BASE			0x0000100
 #define EIP93_REG_PE_CONFIG		((PE_CFG_BASE)+(0x00 * EIP93_REG_WIDTH))
 #define EIP93_REG_PE_STATUS		((PE_CFG_BASE)+(0x01 * EIP93_REG_WIDTH))

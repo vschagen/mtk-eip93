@@ -18,6 +18,35 @@
 #include "eip93-common.h"
 #include "eip93-regs.h"
 
+void mtk_skcipher_handle_result(struct crypto_async_request *async, int err)
+{
+	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(async->tfm);
+	struct mtk_device *mtk = ctx->mtk;
+	struct skcipher_request *req = skcipher_request_cast(async);
+	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
+
+	mtk_unmap_dma(mtk, rctx, req->src, req->dst);
+	mtk_handle_result(mtk, rctx, req->iv);
+
+	skcipher_request_complete(req, err);
+}
+
+static int mtk_skcipher_send_req(struct crypto_async_request *async)
+{
+	struct skcipher_request *req = skcipher_request_cast(async);
+	struct mtk_cipher_reqctx *rctx = skcipher_request_ctx(req);
+	int err;
+
+	err = check_valid_request(rctx);
+
+	if (err) {
+		skcipher_request_complete(req, err);
+		return err;
+	}
+
+	return mtk_send_req(async, req->iv, rctx);
+}
+
 /* Crypto skcipher API functions */
 static int mtk_skcipher_cra_init(struct crypto_tfm *tfm)
 {
@@ -29,9 +58,7 @@ static int mtk_skcipher_cra_init(struct crypto_tfm *tfm)
 					sizeof(struct mtk_cipher_reqctx));
 
 	memset(ctx, 0, sizeof(*ctx));
-
 	ctx->mtk = tmpl->mtk;
-	ctx->type = tmpl->type;
 
 	ctx->sa_in = kzalloc(sizeof(struct saRecord_s), GFP_KERNEL);
 	if (!ctx->sa_in)
@@ -100,6 +127,7 @@ static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 #ifdef CONFIG_CRYPTO_DEV_EIP93_AES
 	if (flags & MTK_ALG_AES) {
 		struct crypto_aes_ctx aes;
+
 		ctx->blksize = AES_BLOCK_SIZE;
 		err = aes_expandkey(&aes, key, keylen);
 	}
@@ -148,6 +176,7 @@ static int mtk_skcipher_crypt(struct skcipher_request *req)
 	rctx->sg_dst = req->dst;
 	rctx->ivsize = crypto_skcipher_ivsize(skcipher);
 	rctx->blksize = ctx->blksize;
+	rctx->flags |= MTK_DESC_SKCIPHER;
 	if (!IS_ECB(rctx->flags))
 		rctx->flags |= MTK_DESC_DMA_IV;
 

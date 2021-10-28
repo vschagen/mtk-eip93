@@ -23,7 +23,6 @@ struct mtk_crypto_ctx {
 	unsigned int			assoclen_out;
 	bool				in_first;
 	bool				out_first;
-	enum mtk_alg_type		type;
 	struct crypto_shash		*shash;
 };
 
@@ -52,6 +51,8 @@ int check_valid_request(struct mtk_cipher_reqctx *rctx);
 
 void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
 			struct scatterlist *reqsrc, struct scatterlist *reqdst);
+
+void mtk_skcipher_handle_result(struct crypto_async_request *async, int err);
 
 int mtk_send_req(struct crypto_async_request *async,
 			const u8 *reqiv, struct mtk_cipher_reqctx *rctx);
