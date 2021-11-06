@@ -1,8 +1,8 @@
-/* SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2019 - 2021
  *
- * Copyright (C) 2019 - 2020
- *
- * Richard van Schagen <vschagen@cs.com>
+ * Richard van Schagen <vschagen@icloud.com>
  */
 #define DEFAULT_PRNG_KEY "0123456789abcdef"
 #define DEFAULT_PRNG_KSZ 16

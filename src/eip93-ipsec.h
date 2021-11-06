@@ -1,42 +1,45 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2020
+ * Copyright (C) 2021
  *
- * Richard van Schagen <vschagen@cs.com>
+ * Richard van Schagen <vschagen@icloud.com>
  */
 
+#include <linux/skbuff.h>
 #include <net/xfrm.h>
 
-#include "eip93-common.h"
+#include "eip93-main.h"
+#include "eip93-regs.h"
 
-#define IPSEC_MAX_ADAPTER_COUNT			16
-#define IPSEC_MAX_SA_COUNT			32
-
-int mtk_protocol_register(struct mtk_device *mtk);
-
-void mtk_protocol_deregister(struct mtk_device *mtk);
-
-void mtk_ipsec_handle_result(struct mtk_device *mtk, struct sk_buff *skb,
-			dma_addr_t srcAddr, u8 nexthdr, int len, int err);
+#define MTK_IPSEC_CB(__skb) ((struct mtk_ipsec_results *)&((__skb)->cb[0]))
 
 struct ipsec_sa_entry {
-	struct hlist_node		hlist;
 	struct mtk_device		*mtk;
-	struct xfrm_state		*xs;
 	struct saRecord_s		*sa;
 	dma_addr_t			sa_base;
-	struct sdesc			*sdesc;
+	struct crypto_shash		*shash;
+	u32				blksize;
 	struct eip93_descriptor_s	cdesc;
-	xfrm_address_t			daddr;
-	__be32				spi;
 };
 
-struct ipsec_adapter {
-	struct net_device		*netdev;
-	struct mtk_device		*mtk;
+struct mtk_ipsec_results {
+	u32		cb;
 };
 
-struct ipsec_table {
-	struct ipsec_sa_entry		*rx_tbl;
-	struct ipsec_sa_entry		*tx_tbl;
+struct mtk_ipsec_cb {
+	u32		org_cb;
+	dma_addr_t	dstAddr;
+	int 		err;
+	int		len;
+	u8		nexthdr;
 };
+
+int mtk_offload_register(void);
+
+void mtk_offload_deregister(void);
+
+int mtk_ipsec_offload(struct xfrm_state *x, struct sk_buff *skb);
+
+void mtk_ipsec_rx_done(unsigned long data);
+
+void mtk_ipsec_tx_done(unsigned long data);
