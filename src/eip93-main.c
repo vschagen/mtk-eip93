@@ -268,12 +268,13 @@ static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 	bool last_entry;
 	u32 flags;
 
-get_more:
-	handled = 0;
 
+	handled = 0;
+get_more:
 	ready = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
 	if (!ready) {
+//		dev_info(mtk->dev, "Handled: %d\n", handled);
 		mtk_irq_clear(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
 		mtk_irq_enable(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
 		return;
@@ -353,6 +354,13 @@ get_more:
 	}
 #endif
 	goto get_more;
+
+	/* set a Budget similar to NAPI */
+	if (handled < 64)
+		goto get_more;
+
+	mtk_irq_clear(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
+	mtk_irq_enable(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
 }
 
 static void mtk_done_task(unsigned long data)
@@ -373,7 +381,7 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 
 	if (irq_status & EIP93_INT_PE_RDRTHRESH_REQ) {
 		mtk_irq_disable(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
-		tasklet_schedule(&mtk->ring->done_task);
+		tasklet_hi_schedule(&mtk->ring->done_task);
 		return IRQ_HANDLED;
 	}
 

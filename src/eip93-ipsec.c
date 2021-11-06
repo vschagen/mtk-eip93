@@ -398,8 +398,8 @@ void mtk_ipsec_rx_done(unsigned long data)
 	struct sk_buff *skb;
 	dma_addr_t dstAddr;
 	u8 nexthdr;
-	int err;
-	int len;
+	int err, len;
+//	int handled = 0;
 	struct ipsec_sa_entry *ipsec;
 	struct xfrm_state *x;
 	struct xfrm_offload *xo;
@@ -433,7 +433,9 @@ void mtk_ipsec_rx_done(unsigned long data)
 		pskb_trim(skb, len);
 		// for inbound continue XFRM (-2 is GRO)
 		xfrm_input(skb, IPPROTO_ESP, x->id.spi, -2);
+//		handled++;
 	}
+//	dev_info(ipsec->mtk->dev, "rx done: %d\n", handled);
 }
 
 void mtk_ipsec_tx_done(unsigned long data)
@@ -443,8 +445,8 @@ void mtk_ipsec_tx_done(unsigned long data)
 	struct sk_buff *skb;
 	dma_addr_t dAddr;
 	u8 nexthdr;
-	int err;
-	int len;
+	int err, len;
+//	int handled = 0;
 	struct ipsec_sa_entry *ipsec;
 	struct xfrm_state *x;
 	struct xfrm_offload *xo;
@@ -483,8 +485,10 @@ void mtk_ipsec_tx_done(unsigned long data)
 			skb_push(skb, skb->data - skb_mac_header(skb));
 			secpath_reset(skb);
 			xfrm_dev_resume(skb);
+//			handled++;
 //		}
 	}
+//	dev_info(ipsec->mtk->dev, "tx done: %d\n", handled);
 }
 
 int mtk_ipsec_offload(struct xfrm_state *x, struct sk_buff *skb)

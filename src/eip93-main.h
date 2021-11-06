@@ -14,7 +14,7 @@
 #include <linux/device.h>
 #include <linux/skbuff.h>
 
-#define MTK_RING_SIZE			768
+#define MTK_RING_SIZE			512
 #define MTK_RING_BUSY			32
 #define MTK_CRA_PRIORITY		1500
 
