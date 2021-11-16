@@ -10,6 +10,8 @@ This should be added to your device DTS or better yet to the mt7621.dtsi:
 
 		compatible = "mediatek,mtk-eip93";
 		reg = <0x1e004000 0x1000>;
+		
+		interrupt-parent = <&gic>;
 		interrupts = <GIC_SHARED 19 IRQ_TYPE_LEVEL_HIGH>;
 	};
 
