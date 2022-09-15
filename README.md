@@ -16,12 +16,10 @@ This should be added to your device DTS or better yet to the mt7621.dtsi:
 		interrupts = <GIC_SHARED 19 IRQ_TYPE_LEVEL_HIGH>;
 	};
 
-The 999-patch is to add the mtk-eip93 to the Kconfig / Make files in the drivers/crypto folder
+The 999-patches is to add the mtk-eip93 to the Kconfig / Make files in the drivers/crypto folder
 Add the crypto/mtk-eip93 folder to the linux drivers
 
 OR:
 
-add the 999-patch to the OpenWrt /target/linux/ramips/patch-5.10 folder
+add the 999-patches to the OpenWrt /target/linux/ramips/patch-5.10 or 5.15 folder
 and the crypto/mtk-eip93 folder to the /target/linux/files/drivers folder
-
-Pending upstream merger.
