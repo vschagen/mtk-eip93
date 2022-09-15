@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2019 - 2021
+ * Copyright (C) 2019 - 2022
  *
  * Richard van Schagen <vschagen@icloud.com>
  */
@@ -19,8 +19,16 @@
 #include "eip93-main.h"
 #include "eip93-regs.h"
 
-inline void *mtk_ring_next_wptr(struct mtk_device *mtk,
-						struct mtk_desc_ring *ring)
+int mtk_ring_free(struct mtk_desc_ring *ring)
+{
+	if ((ring->read <= ring->write))
+		return (MTK_RING_SIZE -
+			((ring->write - ring->read) / ring->offset));
+	else
+		return (ring->read - ring->write) / ring->offset;
+}
+
+static void *mtk_ring_next_wptr(struct mtk_desc_ring *ring)
 {
 	void *ptr = ring->write;
 
@@ -36,8 +44,7 @@ inline void *mtk_ring_next_wptr(struct mtk_device *mtk,
 	return ptr;
 }
 
-inline void *mtk_ring_next_rptr(struct mtk_device *mtk,
-						struct mtk_desc_ring *ring)
+static void *mtk_ring_next_rptr(struct mtk_desc_ring *ring)
 {
 	void *ptr = ring->read;
 
@@ -52,68 +59,74 @@ inline void *mtk_ring_next_rptr(struct mtk_device *mtk,
 	return ptr;
 }
 
-inline int mtk_put_descriptor(struct mtk_device *mtk,
-					struct eip93_descriptor_s *desc)
+int mtk_put_descriptor(struct mtk_device *mtk, struct eip93_descriptor_s *desc)
 {
-	struct eip93_descriptor_s *cdesc;
-	struct eip93_descriptor_s *rdesc;
+	u32 *ptr;
+	const u32 *cdesc = (u32)desc;
 	unsigned long irqflags;
 
 	spin_lock_irqsave(&mtk->ring->write_lock, irqflags);
 
-	rdesc = mtk_ring_next_wptr(mtk, &mtk->ring->rdr);
+	ptr = mtk_ring_next_wptr(&mtk->ring->rdr);
 
-	if (IS_ERR(rdesc)) {
+	if (IS_ERR(ptr)) {
 		spin_unlock_irqrestore(&mtk->ring->write_lock, irqflags);
 		return -ENOENT;
 	}
 
-	cdesc = mtk_ring_next_wptr(mtk, &mtk->ring->cdr);
+	ptr[0] = 0;
+	ptr[7] = 0;
 
-	if (IS_ERR(cdesc)) {
+	ptr = mtk_ring_next_wptr(&mtk->ring->cdr);
+
+	if (IS_ERR(ptr)) {
 		spin_unlock_irqrestore(&mtk->ring->write_lock, irqflags);
 		return -ENOENT;
 	}
 
-	memset(rdesc, 0, sizeof(struct eip93_descriptor_s));
-	memcpy(cdesc, desc, sizeof(struct eip93_descriptor_s));
+	ptr[0] = cdesc[0];
+	ptr[1] = cdesc[1];
+	ptr[2] = cdesc[2];
+	ptr[3] = cdesc[3];
+	ptr[4] = cdesc[4];
+	ptr[5] = cdesc[5];
+	ptr[6] = cdesc[6];
+	ptr[7] = cdesc[7];
 
-	atomic_dec(&mtk->ring->free);
 	spin_unlock_irqrestore(&mtk->ring->write_lock, irqflags);
 
 	return 0;
 }
 
-inline void *mtk_get_descriptor(struct mtk_device *mtk)
+void *mtk_get_descriptor(struct mtk_device *mtk)
 {
-	struct eip93_descriptor_s *cdesc;
-	void *ptr;
+	u32 *ptr;
 	unsigned long irqflags;
 
 	spin_lock_irqsave(&mtk->ring->read_lock, irqflags);
 
-	cdesc = mtk_ring_next_rptr(mtk, &mtk->ring->cdr);
+	ptr = mtk_ring_next_rptr(&mtk->ring->cdr);
 
-	if (IS_ERR(cdesc)) {
-		spin_unlock_irqrestore(&mtk->ring->read_lock, irqflags);
-		return ERR_PTR(-ENOENT);
-	}
-
-	memset(cdesc, 0, sizeof(struct eip93_descriptor_s));
-
-	ptr = mtk_ring_next_rptr(mtk, &mtk->ring->rdr);
 	if (IS_ERR(ptr)) {
 		spin_unlock_irqrestore(&mtk->ring->read_lock, irqflags);
 		return ERR_PTR(-ENOENT);
 	}
 
-	atomic_inc(&mtk->ring->free);
+	ptr[0] = 0;
+	ptr[7] = 0;
+
+	ptr = mtk_ring_next_rptr(&mtk->ring->rdr);
+	if (IS_ERR(ptr)) {
+		spin_unlock_irqrestore(&mtk->ring->read_lock, irqflags);
+		return ERR_PTR(-ENOENT);
+	}
+
 	spin_unlock_irqrestore(&mtk->ring->read_lock, irqflags);
 
 	return ptr;
 }
 
-inline int mtk_get_free_saState(struct mtk_device *mtk)
+int mtk_get_free_saState(struct mtk_device *mtk)
 {
 	struct mtk_state_pool *saState_pool;
 	int i;
@@ -124,13 +137,12 @@ inline int mtk_get_free_saState(struct mtk_device *mtk)
 			saState_pool->in_use = true;
 			return i;
 		}
-
 	}
 
 	return -ENOENT;
 }
 
-static inline void mtk_free_sg_copy(const int len, struct scatterlist **sg)
+static void mtk_free_sg_copy(const int len, struct scatterlist **sg)
 {
 	if (!*sg || !len)
 		return;
@@ -140,7 +152,7 @@ static inline void mtk_free_sg_copy(const int len, struct scatterlist **sg)
 	*sg = NULL;
 }
 
-static inline int mtk_make_sg_copy(struct scatterlist *src,
+static int mtk_make_sg_copy(struct scatterlist *src,
 			struct scatterlist **dst,
 			const uint32_t len, const bool copy)
 {
@@ -170,7 +182,7 @@ static inline int mtk_make_sg_copy(struct scatterlist *src,
 	return 0;
 }
 
-static inline bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len,
+static bool mtk_is_sg_aligned(struct scatterlist *sg, u32 len,
 						const int blksize)
 {
 	int nents;
@@ -367,9 +379,8 @@ void mtk_set_saRecord(struct saRecord_s *saRecord, const unsigned int keylen,
  * For performance better to wait for hardware to perform multiple DMA
  *
  */
-static inline int mtk_scatter_combine(struct mtk_device *mtk,
-			struct mtk_cipher_reqctx *rctx,
-			u32 datalen, u32 split, int offsetin)
+static int mtk_scatter_combine(struct mtk_cipher_reqctx *rctx,
+			u32 datalen, u32 split)
 {
 	struct eip93_descriptor_s *cdesc = rctx->cdesc;
 	struct scatterlist *sgsrc = rctx->sg_src;
@@ -379,14 +390,11 @@ static inline int mtk_scatter_combine(struct mtk_device *mtk,
 	dma_addr_t saddr = sg_dma_address(sgsrc);
 	dma_addr_t daddr = sg_dma_address(sgdst);
 	dma_addr_t stateAddr;
-	u32 srcAddr, dstAddr, len, n;
+	u32 len, n;
 	bool nextin = false;
 	bool nextout = false;
-	int offsetout = 0;
-	int ndesc_cdr = 0, err;
-
-	if (IS_ECB(rctx->flags))
-		rctx->saState_base = 0;
+	int offsetin = 0, offsetout = 0;
+	int err;
 
 	if (split < datalen) {
 		stateAddr = rctx->saState_base_ctr;
@@ -418,8 +426,9 @@ static inline int mtk_scatter_combine(struct mtk_device *mtk,
 			offsetout = 0;
 			nextout = false;
 		}
-		srcAddr = saddr + offsetin;
-		dstAddr = daddr + offsetout;
+		cdesc->srcAddr = saddr + offsetin;
+		cdesc->dstAddr = daddr + offsetout;
+		cdesc->stateAddr = stateAddr;
 
 		if (remainin == remainout) {
 			len = remainin;
@@ -462,9 +471,6 @@ static inline int mtk_scatter_combine(struct mtk_device *mtk,
 		}
 		n -= len;
 
-		cdesc->srcAddr = srcAddr;
-		cdesc->dstAddr = dstAddr;
-		cdesc->stateAddr = stateAddr;
 		cdesc->peLength.bits.peReady = 0;
 		cdesc->peLength.bits.byPass = 0;
 		cdesc->peLength.bits.length = len;
@@ -483,25 +489,21 @@ static inline int mtk_scatter_combine(struct mtk_device *mtk,
 		 * Maybe refine by slowing down at MTK_RING_BUSY
 		 */
 again:
-		err = mtk_put_descriptor(mtk, cdesc);
+		err = mtk_put_descriptor(rctx->mtk, cdesc);
 		if (err) {
 			udelay(500);
 			goto again;
 		}
 		/* Writing new descriptor count starts DMA action */
-		writel(1, mtk->base + EIP93_REG_PE_CD_COUNT);
-
-		ndesc_cdr++;
+		writel(1, rctx->mtk->base + EIP93_REG_PE_CD_COUNT);
 	} while (n);
 
 	return -EINPROGRESS;
 }
 
-int mtk_send_req(struct crypto_async_request *async,
-			const u8 *reqiv, struct mtk_cipher_reqctx *rctx)
+int mtk_send_req(struct mtk_cipher_reqctx *rctx, const u8 *reqiv)
 {
-	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(async->tfm);
-	struct mtk_device *mtk = ctx->mtk;
+	struct mtk_device *mtk = rctx->mtk;
 	struct scatterlist *src = rctx->sg_src;
 	struct scatterlist *dst = rctx->sg_dst;
 	struct saState_s *saState;
@@ -509,7 +511,6 @@ int mtk_send_req(struct crypto_async_request *async,
 	struct eip93_descriptor_s cdesc;
 	u32 flags = rctx->flags;
 	int idx;
-	int offsetin = 0, err = -ENOMEM;
 	u32 datalen = rctx->assoclen + rctx->textsize;
 	u32 split = datalen;
 	u32 start, end, ctr, blocks;
@@ -518,8 +519,10 @@ int mtk_send_req(struct crypto_async_request *async,
 	rctx->saState_ctr = NULL;
 	rctx->saState = NULL;
 
-	if (IS_ECB(flags))
+	if (IS_ECB(flags)) {
+		rctx->saState_base = 0;
 		goto skip_iv;
+	}
 
 	memcpy(iv, reqiv, rctx->ivsize);
 
@@ -533,7 +536,8 @@ int mtk_send_req(struct crypto_async_request *async,
 	} else  {
 		idx = mtk_get_free_saState(mtk);
 		if (idx < 0)
-			goto send_err;
+			return -ENOMEM;
+
 		saState_pool = &mtk->ring->saState_pool[idx];
 		rctx->saState_idx = idx;
 		rctx->saState = saState_pool->base;
@@ -544,14 +548,14 @@ int mtk_send_req(struct crypto_async_request *async,
 	saState = rctx->saState;
 
 	if (IS_RFC3686(flags)) {
-		saState->stateIv[0] = ctx->saNonce;
+		saState->stateIv[0] = rctx->saNonce;
 		saState->stateIv[1] = iv[0];
 		saState->stateIv[2] = iv[1];
-		saState->stateIv[3] = cpu_to_be32(1);
+		saState->stateIv[3] = htonl(1);
 	} else if (!IS_HMAC(flags) && IS_CTR(flags)) {
 		/* Compute data length. */
 		blocks = DIV_ROUND_UP(rctx->textsize, AES_BLOCK_SIZE);
-		ctr = be32_to_cpu(iv[3]);
+		ctr = ntohl(iv[3]);
 		/* Check 32bit counter overflow. */
 		start = ctr;
 		end = start + blocks - 1;
@@ -589,7 +593,7 @@ skip_iv:
 	cdesc.peCrtlStat.bits.padCrtlStat = 0;
 	cdesc.peCrtlStat.bits.peReady = 0;
 	cdesc.saAddr = rctx->saRecord_base;
-	cdesc.arc4Addr = (uint32_t)async;
+	cdesc.arc4Addr = (uintptr_t)rctx->async;
 	cdesc.userId = flags;
 	rctx->cdesc = &cdesc;
 
@@ -600,9 +604,7 @@ skip_iv:
 	if (src != dst)
 		dma_map_sg(mtk->dev, src, rctx->src_nents, DMA_TO_DEVICE);
 
-	err = mtk_scatter_combine(mtk, rctx, datalen, split, offsetin);
-
-	return err;
+	return mtk_scatter_combine(rctx, datalen, split);
 
 free_state:
 	if (rctx->saState) {
@@ -614,13 +616,14 @@ free_state:
 		saState_pool = &mtk->ring->saState_pool[rctx->saState_ctr_idx];
 		saState_pool->in_use = false;
 	}
-send_err:
-	return err;
+
+	return -ENOMEM;
 }
 
-void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
-			struct scatterlist *reqsrc, struct scatterlist *reqdst)
+void mtk_unmap_dma(struct mtk_cipher_reqctx *rctx, struct scatterlist *reqsrc,
+		struct scatterlist *reqdst)
 {
+	struct mtk_device *mtk = rctx->mtk;
 	u32 len = rctx->assoclen + rctx->textsize;
 	u32 authsize = rctx->authsize;
 	u32 flags = rctx->flags;
@@ -662,9 +665,9 @@ process_tag:
 	}
 }
 
-void mtk_handle_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
-			u8 *reqiv)
+void mtk_handle_result(struct mtk_cipher_reqctx *rctx, u8 *reqiv)
 {
+	struct mtk_device *mtk = rctx->mtk;
 	struct mtk_state_pool *saState_pool;
 
 	if (IS_DMA_IV(rctx->flags))

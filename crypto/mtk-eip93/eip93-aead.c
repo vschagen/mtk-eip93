@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2019 - 2021
+ * Copyright (C) 2019 - 2022
  *
  * Richard van Schagen <vschagen@icloud.com>
  */
@@ -28,15 +28,12 @@
 #include "eip93-common.h"
 #include "eip93-regs.h"
 
-void mtk_aead_handle_result(struct crypto_async_request *async, int err)
+void mtk_aead_handle_result(struct aead_request *req, int err)
 {
-	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(async->tfm);
-	struct mtk_device *mtk = ctx->mtk;
-	struct aead_request *req = aead_request_cast(async);
 	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
 
-	mtk_unmap_dma(mtk, rctx, req->src, req->dst);
-	mtk_handle_result(mtk, rctx, req->iv);
+	mtk_unmap_dma(rctx, req->src, req->dst);
+	mtk_handle_result(rctx, req->iv);
 
 	if (err == 1)
 		err = -EBADMSG;
@@ -47,9 +44,8 @@ void mtk_aead_handle_result(struct crypto_async_request *async, int err)
 	aead_request_complete(req, err);
 }
 
-static int mtk_aead_send_req(struct crypto_async_request *async)
+static int mtk_aead_send_req(struct aead_request *req)
 {
-	struct aead_request *req = aead_request_cast(async);
 	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
 	int err;
 
@@ -59,7 +55,8 @@ static int mtk_aead_send_req(struct crypto_async_request *async)
 		return err;
 	}
 
-	return mtk_send_req(async, req->iv, rctx);
+	rctx->async = (uintptr_t)req;
+	return mtk_send_req(rctx, req->iv);
 }
 
 /* Crypto aead API functions */
@@ -246,7 +243,6 @@ static void mtk_aead_setassoc(struct mtk_crypto_ctx *ctx,
 
 		ctx->sa_base_in = dma_map_single(ctx->mtk->dev, ctx->sa_in,
 				sizeof(struct saRecord_s), DMA_TO_DEVICE);
-		ctx->assoclen_in = req->assoclen;
 	} else {
 		dma_unmap_single(ctx->mtk->dev, ctx->sa_base_out,
 				sizeof(struct saRecord_s), DMA_TO_DEVICE);
@@ -255,14 +251,12 @@ static void mtk_aead_setassoc(struct mtk_crypto_ctx *ctx,
 
 		ctx->sa_base_out = dma_map_single(ctx->mtk->dev, ctx->sa_out,
 			sizeof(struct saRecord_s), DMA_TO_DEVICE);
-		ctx->assoclen_out = req->assoclen;
 	}
 }
 
 static int mtk_aead_crypt(struct aead_request *req)
 {
 	struct mtk_cipher_reqctx *rctx = aead_request_ctx(req);
-	struct crypto_async_request *async = &req->base;
 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
 	struct crypto_aead *aead = crypto_aead_reqtfm(req);
 
@@ -274,11 +268,13 @@ static int mtk_aead_crypt(struct aead_request *req)
 	rctx->sg_dst = req->dst;
 	rctx->ivsize = crypto_aead_ivsize(aead);
 	rctx->flags |= MTK_DESC_AEAD;
+	rctx->mtk = ctx->mtk;
+	rctx->saNonce = ctx->saNonce;
 
 	if IS_DECRYPT(rctx->flags)
 		rctx->textsize -= rctx->authsize;
 
-	return mtk_aead_send_req(async);
+	return mtk_aead_send_req(req);
 }
 
 static int mtk_aead_encrypt(struct aead_request *req)
@@ -293,11 +289,6 @@ static int mtk_aead_encrypt(struct aead_request *req)
 	if (ctx->out_first) {
 		mtk_aead_setassoc(ctx, req, false);
 		ctx->out_first = false;
-	}
-
-	if (req->assoclen != ctx->assoclen_out) {
-		dev_err(ctx->mtk->dev, "Request AAD length error\n");
-		return -EINVAL;
 	}
 
 	rctx->saRecord_base = ctx->sa_base_out;
@@ -319,17 +310,14 @@ static int mtk_aead_decrypt(struct aead_request *req)
 		ctx->in_first = false;
 	}
 
-	if (req->assoclen != ctx->assoclen_in) {
-		dev_err(ctx->mtk->dev, "Request AAD length error\n");
-		return -EINVAL;
-	}
-
 	rctx->saRecord_base = ctx->sa_base_in;
 
 	return mtk_aead_crypt(req);
 }
 
 /* Available authenc algorithms in this module */
+
+
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
 struct mtk_alg_template mtk_alg_authenc_hmac_md5_cbc_aes = {
 	.type = MTK_ALG_TYPE_AEAD,

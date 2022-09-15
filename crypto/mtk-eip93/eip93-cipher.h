@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2019 - 2021
+ * Copyright (C) 2019 - 2022
  *
  * Richard van Schagen <vschagen@icloud.com>
  */
@@ -19,14 +19,14 @@ struct mtk_crypto_ctx {
 	int				blksize;
 	/* AEAD specific */
 	unsigned int			authsize;
-	unsigned int			assoclen_in;
-	unsigned int			assoclen_out;
 	bool				in_first;
 	bool				out_first;
 	struct crypto_shash		*shash;
 };
 
 struct mtk_cipher_reqctx {
+	struct mtk_device		*mtk;
+	uintptr_t			async;
 	unsigned long			flags;
 	unsigned int			blksize;
 	unsigned int			ivsize;
@@ -34,6 +34,7 @@ struct mtk_cipher_reqctx {
 	unsigned int			assoclen;
 	unsigned int			authsize;
 	dma_addr_t			saRecord_base;
+	uint32_t			saNonce;
 	struct saState_s		*saState;
 	dma_addr_t			saState_base;
 	uint32_t			saState_idx;
@@ -47,17 +48,6 @@ struct mtk_cipher_reqctx {
 	uint32_t			saState_ctr_idx;
 };
 
-int check_valid_request(struct mtk_cipher_reqctx *rctx);
-
-void mtk_unmap_dma(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
-			struct scatterlist *reqsrc, struct scatterlist *reqdst);
-
-void mtk_skcipher_handle_result(struct crypto_async_request *async, int err);
-
-int mtk_send_req(struct crypto_async_request *async,
-			const u8 *reqiv, struct mtk_cipher_reqctx *rctx);
-
-void mtk_handle_result(struct mtk_device *mtk, struct mtk_cipher_reqctx *rctx,
-			u8 *reqiv);
+void mtk_skcipher_handle_result(struct skcipher_request *req, int err);
 
 #endif /* _EIP93_CIPHER_H_ */

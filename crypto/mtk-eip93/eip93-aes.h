@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2019 - 2021
+ * Copyright (C) 2019 - 2022
  *
  * Richard van Schagen <vschagen@icloud.com>
  */

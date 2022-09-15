@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2019 - 2021
+ * Copyright (C) 2019 - 2022
  *
  * Richard van Schagen <vschagen@icloud.com>
  */
@@ -21,24 +21,34 @@
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_SKCIPHER)
 #include "eip93-cipher.h"
 #endif
-#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_SKCIPHER_AES)
 #include "eip93-aes.h"
 #endif
-#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_SKCIPHER_DES)
 #include "eip93-des.h"
 #endif
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AEAD)
 #include "eip93-aead.h"
 #endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_PRNG)
+#include "eip93-prng.h"
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_HASH)
+#include "eip93-hash.h"
+#include <crypto/sha2.h>
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC)
+#include "eip93-ipsec.h"
+#endif
 
 static struct mtk_alg_template *mtk_algs[] = {
-#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_SKCIPHER_DES)
 	&mtk_alg_ecb_des,
 	&mtk_alg_cbc_des,
 	&mtk_alg_ecb_des3_ede,
 	&mtk_alg_cbc_des3_ede,
 #endif
-#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_SKCIPHER_AES)
 	&mtk_alg_ecb_aes,
 	&mtk_alg_cbc_aes,
 	&mtk_alg_ctr_aes,
@@ -64,22 +74,19 @@ static struct mtk_alg_template *mtk_algs[] = {
 	&mtk_alg_authenc_hmac_sha224_rfc3686_aes,
 	&mtk_alg_authenc_hmac_sha256_rfc3686_aes,
 #endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_PRNG)
+	&mtk_alg_prng,
+//	&mtk_alg_cprng,
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_HASH)
+//	&mtk_alg_sha1,
+//	&mtk_alg_sha224,
+//	&mtk_alg_sha256,
+//	&mtk_alg_hmac_sha1,
+//	&mtk_alg_hmac_sha224,
+//	&mtk_alg_hmac_sha256,
+#endif
 };
-
-inline void mtk_irq_disable(struct mtk_device *mtk, u32 mask)
-{
-	__raw_writel(mask, mtk->base + EIP93_REG_MASK_DISABLE);
-}
-
-inline void mtk_irq_enable(struct mtk_device *mtk, u32 mask)
-{
-	__raw_writel(mask, mtk->base + EIP93_REG_MASK_ENABLE);
-}
-
-inline void mtk_irq_clear(struct mtk_device *mtk, u32 mask)
-{
-	__raw_writel(mask, mtk->base + EIP93_REG_INT_CLR);
-}
 
 static void mtk_unregister_algs(unsigned int i)
 {
@@ -93,6 +100,11 @@ static void mtk_unregister_algs(unsigned int i)
 		case MTK_ALG_TYPE_AEAD:
 			crypto_unregister_aead(&mtk_algs[j]->alg.aead);
 			break;
+		case MTK_ALG_TYPE_AHASH:
+			crypto_unregister_ahash(&mtk_algs[j]->alg.ahash);
+			break;
+		case MTK_ALG_TYPE_PRNG:
+			crypto_unregister_rng(&mtk_algs[j]->alg.rng);
 		}
 	}
 }
@@ -112,6 +124,11 @@ static int mtk_register_algs(struct mtk_device *mtk)
 		case MTK_ALG_TYPE_AEAD:
 			err = crypto_register_aead(&mtk_algs[i]->alg.aead);
 			break;
+		case MTK_ALG_TYPE_AHASH:
+			err = crypto_register_ahash(&mtk_algs[i]->alg.ahash);
+			break;
+		case MTK_ALG_TYPE_PRNG:
+			err = crypto_register_rng(&mtk_algs[i]->alg.rng);
 		}
 		if (err)
 			goto fail;
@@ -127,7 +144,6 @@ fail:
 
 static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 {
-	struct crypto_async_request *async;
 	struct eip93_descriptor_s *rdesc;
 	bool last_entry;
 	u32 flags;
@@ -136,16 +152,17 @@ static void mtk_handle_result_descriptor(struct mtk_device *mtk)
 	union peLength_w done2;
 
 get_more:
-	handled = 0;
-
 	ready = readl(mtk->base + EIP93_REG_PE_RD_COUNT) & GENMASK(10, 0);
 
 	if (!ready) {
-		mtk_irq_clear(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
-		mtk_irq_enable(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
+		__raw_writel(EIP93_INT_PE_RDRTHRESH_REQ,
+					mtk->base + EIP93_REG_INT_CLR);
+		__raw_writel(EIP93_INT_PE_RDRTHRESH_REQ,
+					mtk->base + EIP93_REG_MASK_ENABLE);
 		return;
 	}
 
+	handled = 0;
 	last_entry = false;
 
 	while (ready) {
@@ -162,32 +179,61 @@ get_more:
 			done2.word = READ_ONCE(rdesc->peLength.word);
 		} while ((!done1.bits.peReady) || (!done2.bits.peReady));
 
-		err = rdesc->peCrtlStat.bits.errStatus;
-
-		flags = rdesc->userId;
-		async = (struct crypto_async_request *)rdesc->arc4Addr;
-
-		writel(1, mtk->base + EIP93_REG_PE_RD_COUNT);
-		mtk_irq_clear(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
-
+//		writel(1, mtk->base + EIP93_REG_PE_RD_COUNT);
 		handled++;
 		ready--;
+		flags = rdesc->userId;
 
 		if (flags & MTK_DESC_LAST) {
+			err = rdesc->peCrtlStat.bits.errStatus;
 			last_entry = true;
 			break;
 		}
 	}
 
+	if (handled)
+		writel(handled, mtk->base + EIP93_REG_PE_RD_COUNT);
+
 	if (!last_entry)
 		goto get_more;
+
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_SKCIPHER)
 	if (flags & MTK_DESC_SKCIPHER)
-		mtk_skcipher_handle_result(async, err);
+		mtk_skcipher_handle_result(
+			(struct skcipher_request *)rdesc->arc4Addr, err);
 #endif
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AEAD)
 	if (flags & MTK_DESC_AEAD)
-		mtk_aead_handle_result(async, err);
+		mtk_aead_handle_result(
+			(struct aead_request *)rdesc->arc4Addr, err);
+#endif
+//#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_HASH)
+//	if (flags & MTK_DESC_AHASH)
+//		mtk_ahash_handle_result(async, err);
+//#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_PRNG)
+	if (flags & MTK_DESC_PRNG)
+		mtk_prng_done(mtk, err);
+#endif
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC)
+	if (flags & MTK_DESC_IPSEC) {
+		struct mtk_ipsec_cb *mtk_ipsec_cb;
+		struct sk_buff *skb;
+
+		skb = (struct sk_buff *)rdesc->arc4Addr;
+		mtk_ipsec_cb = (struct mtk_ipsec_cb *)MTK_IPSEC_CB(skb)->cb;
+		mtk_ipsec_cb->dstAddr = (u32)rdesc->dstAddr;
+		mtk_ipsec_cb->len = rdesc->peLength.bits.length;
+		mtk_ipsec_cb->err = err;
+		mtk_ipsec_cb->nexthdr = rdesc->peCrtlStat.bits.padValue;
+		if (IS_DECRYPT(flags)) {
+			__skb_queue_tail(&mtk->ring->rx_queue, skb);
+			tasklet_hi_schedule(&mtk->ring->rx_task);
+		} else {
+			__skb_queue_tail(&mtk->ring->tx_queue, skb);
+			tasklet_hi_schedule(&mtk->ring->tx_task);
+		}
+	}
 #endif
 	goto get_more;
 }
@@ -207,14 +253,15 @@ static irqreturn_t mtk_irq_handler(int irq, void *dev_id)
 	irq_status = readl(mtk->base + EIP93_REG_INT_MASK_STAT);
 
 	if (irq_status & EIP93_INT_PE_RDRTHRESH_REQ) {
-		mtk_irq_disable(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
+		__raw_writel(EIP93_INT_PE_RDRTHRESH_REQ,
+					mtk->base + EIP93_REG_MASK_DISABLE);
 		tasklet_schedule(&mtk->ring->done_task);
 		return IRQ_HANDLED;
 	}
 
-	mtk_irq_clear(mtk, irq_status);
+	__raw_writel(irq_status, mtk->base + EIP93_REG_INT_CLR);
 	if (irq_status)
-		mtk_irq_disable(mtk, irq_status);
+		__raw_writel(irq_status, mtk->base + EIP93_REG_MASK_DISABLE);
 
 	return IRQ_NONE;
 }
@@ -255,10 +302,12 @@ static void mtk_initialize(struct mtk_device *mtk)
 	/* Config Clocks */
 	peClockCfg.word = 0;
 	peClockCfg.bits.enPEclk = 1;
-#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES)
+#if (IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_DES) || \
+				IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC))
 	peClockCfg.bits.enDESclk = 1;
 #endif
-#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
+#if (IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES) || \
+				IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC))
 	peClockCfg.bits.enAESclk = 1;
 #endif
 #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_HMAC)
@@ -274,8 +323,8 @@ static void mtk_initialize(struct mtk_device *mtk)
 	writel(peBufThresh.word, mtk->base + EIP93_REG_PE_BUF_THRESH);
 
 	/* Clear/ack all interrupts before disable all */
-	mtk_irq_clear(mtk, 0xFFFFFFFF);
-	mtk_irq_disable(mtk, 0xFFFFFFFF);
+	__raw_writel(0xFFFFFFFF, mtk->base + EIP93_REG_INT_CLR);
+	__raw_writel(0xFFFFFFFF, mtk->base + EIP93_REG_MASK_DISABLE);
 
 	/* Config Ring Threshold */
 	peRingThresh.word = 0;
@@ -337,7 +386,11 @@ static int mtk_desc_init(struct mtk_device *mtk)
 
 	writel(peRingCfg.word, mtk->base + EIP93_REG_PE_RING_CONFIG);
 
-	atomic_set(&mtk->ring->free, MTK_RING_SIZE - 1);
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_HASH)
+	err = mtk_set_ring(mtk, hash_buf, RingOffset);
+	if (err)
+		return err;
+#endif
 	/* Create State record DMA pool */
 	RingOffset = sizeof(struct saState_s);
 	mtk->ring->saState = dmam_alloc_coherent(mtk->dev,
@@ -365,8 +418,8 @@ static void mtk_cleanup(struct mtk_device *mtk)
 	tasklet_kill(&mtk->ring->done_task);
 
 	/* Clear/ack all interrupts before disable all */
-	mtk_irq_clear(mtk, 0xFFFFFFFF);
-	mtk_irq_disable(mtk, 0xFFFFFFFF);
+	__raw_writel(0xFFFFFFFF, mtk->base + EIP93_REG_INT_CLR);
+	__raw_writel(0xFFFFFFFF, mtk->base + EIP93_REG_MASK_DISABLE);
 
 	writel(0, mtk->base + EIP93_REG_PE_CLOCK_CTRL);
 
@@ -413,19 +466,43 @@ static int mtk_crypto_probe(struct platform_device *pdev)
 
 	tasklet_init(&mtk->ring->done_task, mtk_done_task, (unsigned long)mtk);
 
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC)
+	__skb_queue_head_init(&mtk->ring->rx_queue);
+	__skb_queue_head_init(&mtk->ring->tx_queue);
+
+	tasklet_init(&mtk->ring->rx_task, mtk_ipsec_rx_done,
+							(unsigned long)mtk);
+	tasklet_init(&mtk->ring->tx_task, mtk_ipsec_tx_done,
+							(unsigned long)mtk);
+#endif
+
 	spin_lock_init(&mtk->ring->read_lock);
 	spin_lock_init(&mtk->ring->write_lock);
 
 	mtk_initialize(mtk);
 
 	/* Init. finished, enable RDR interupt */
-	mtk_irq_enable(mtk, EIP93_INT_PE_RDRTHRESH_REQ);
+	__raw_writel(EIP93_INT_PE_RDRTHRESH_REQ,
+					mtk->base + EIP93_REG_MASK_ENABLE);
+
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_PRNG)
+	mtk->prng = devm_kcalloc(mtk->dev, 1, sizeof(*mtk->prng), GFP_KERNEL);
+
+	if (!mtk->prng)
+		return -ENOMEM;
+
+	err = mtk_prng_init(mtk, true);
+#endif
 
 	err = mtk_register_algs(mtk);
 	if (err) {
 		mtk_cleanup(mtk);
 		return err;
 	}
+
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC)
+	err = mtk_offload_register();
+#endif
 
 	dev_info(mtk->dev, "EIP93 Crypto Engine Initialized.");
 
@@ -437,6 +514,11 @@ static int mtk_crypto_remove(struct platform_device *pdev)
 	struct mtk_device *mtk = platform_get_drvdata(pdev);
 
 	mtk_unregister_algs(ARRAY_SIZE(mtk_algs));
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC)
+	mtk_offload_deregister();
+	tasklet_kill(&mtk->ring->rx_task);
+	tasklet_kill(&mtk->ring->tx_task);
+#endif
 	mtk_cleanup(mtk);
 	dev_info(mtk->dev, "EIP93 removed.\n");
 

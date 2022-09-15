@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2019 - 2021
+ * Copyright (C) 2019 - 2022
  *
  * Richard van Schagen <vschagen@icloud.com>
  */
@@ -26,6 +26,6 @@ extern struct mtk_alg_template mtk_alg_authenc_hmac_sha224_cbc_des3_ede;
 extern struct mtk_alg_template mtk_alg_authenc_hmac_sha256_cbc_des3_ede;
 #endif
 
-void mtk_aead_handle_result(struct crypto_async_request *async, int err);
+void mtk_aead_handle_result(struct aead_request *req, int err);
 
 #endif /* _EIP93_AEAD_H_ */
